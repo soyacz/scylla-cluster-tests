@@ -213,7 +213,7 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
         self._containers = {}
         self.is_seed = False
 
-        self.remoter = None
+        self.remoter: Optional[RemoteCmdRunnerBase] = None
         self.is_scylla_bench_installed = False
 
         self._spot_monitoring_thread = None
