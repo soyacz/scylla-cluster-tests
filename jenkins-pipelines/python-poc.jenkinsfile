@@ -49,7 +49,7 @@ pipeline {
 //         }
         stage('Hello') {
             steps {
-                sh "export JENKINS_PARAMS='${params}' && source poc-venv/bin/activate && invoke all-tasks"
+                sh "source poc-venv/bin/activate && JENKINS_PARAMS='${params}' invoke all-tasks"
             }
         }
     }
