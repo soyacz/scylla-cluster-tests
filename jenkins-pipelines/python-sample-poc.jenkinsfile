@@ -38,18 +38,33 @@ pipeline {
 
 
         }
-
     stages {
-//         stage('Prepare python') {
-//             steps {
-//                 sh "pip3 install virtualenv"
-//                 sh "python3 -m virtualenv poc-venv"
-//                 sh "source poc-venv/bin/activate && pip3 install invoke rich"
-//             }
-//         }
-        stage('Hello') {
+        stage('Prepare python') {
             steps {
-                sh "source poc-venv/bin/activate && JENKINS_PARAMS='${params}' invoke all-tasks"
+                sh "pip3 install virtualenv"
+                sh "python3 -m virtualenv poc-venv"
+                sh "source poc-venv/bin/activate && pip3 install invoke rich"
+            }
+        }
+        stage('Clean') {
+            steps {
+                sh "[[ -f persisted_params.json ]] && rm persisted_params.json || echo 'No persisted_params file cleanup needed'"
+                sh "JENKINS_PARAMS='${params}' poc-venv/bin/invoke sample.clean"
+            }
+        }
+        stage('Build') {
+            steps {
+                sh "poc-venv/bin/invoke sample.build"
+            }
+        }
+        stage('Test') {
+            steps {
+                sh "poc-venv/bin/invoke sample.test"
+            }
+        }
+        stage('Package') {
+            steps {
+                sh "poc-venv/bin/invoke sample.package"
             }
         }
     }

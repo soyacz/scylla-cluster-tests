@@ -1,0 +1,76 @@
+pipeline {
+    agent {
+            label {
+                label 'aws-sct-builders-eu-west-1-new'
+            }
+        }
+
+    environment {
+            AWS_ACCESS_KEY_ID     = credentials('qa-aws-secret-key-id')
+            AWS_SECRET_ACCESS_KEY = credentials('qa-aws-secret-access-key')
+            SCT_TEST_ID = UUID.randomUUID().toString()
+        }
+        parameters {
+            string(defaultValue: "aws",
+               description: 'aws|gce',
+               name: 'backend')
+
+            string(defaultValue: "eu-west-1",
+               description: 'Supported: us-east-1|eu-west-1|eu-west-2|eu-north-1|random (randomly select region)',
+               name: 'aws_region')
+            string(defaultValue: "a",
+               description: 'Availability zone',
+               name: 'availability_zone')
+
+            string(defaultValue: '', description: '', name: 'scylla_ami_id')
+            string(defaultValue: '', description: '', name: 'gce_image_db')
+
+            string(defaultValue: '',
+                   description: 'cloud path for RPMs, s3:// or gs://',
+                   name: 'update_db_packages')
+            string(defaultValue: '', description: '', name: 'scylla_version')
+            string(defaultValue: '', description: '', name: 'scylla_repo')
+            string(defaultValue: '', description: '', name: 'scylla_mgmt_agent_version')
+
+            string(defaultValue: '',
+                   description: 'If empty - the default manager version will be taken',
+                   name: 'scylla_mgmt_address')
+
+
+        }
+    stages {
+        stage('Prepare python') {
+            steps {
+                sh "pip3 install virtualenv"
+                sh "python3 -m virtualenv poc-venv"
+                sh "source poc-venv/bin/activate && pip3 install invoke rich"
+            }
+        }
+        stage('Clean') {
+            steps {
+                sh "[[ -f persisted_params.json ]] && rm persisted_params.json || echo 'No persisted_params file cleanup needed'"
+                sh "JENKINS_PARAMS='${params}' poc-venv/bin/invoke clean"
+            }
+        }
+        stage('Build') {
+            steps {
+                sh "poc-venv/bin/invoke build"
+            }
+        }
+        stage('Test') {
+            steps {
+                sh "poc-venv/bin/invoke test"
+            }
+        }
+        stage('Package') {
+            steps {
+                sh "poc-venv/bin/invoke package"
+            }
+        }
+    }
+//     post {
+//         always {
+//             archiveArtifacts artifacts: 'report.html, log.html, output.xml'
+//         }
+//     }
+}
