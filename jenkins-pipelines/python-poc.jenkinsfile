@@ -17,7 +17,7 @@ pipeline {
             steps {
                 sh "pip3 install virtualenv"
                 sh "python3 -m virtualenv poc-venv"
-                sh "source poc-venv/bin/activate && pip3 install robotframework robotframework-roboops"
+                sh "source poc-venv/bin/activate && pip3 install invoke rich"
             }
         }
         stage('Hello') {
@@ -26,7 +26,7 @@ pipeline {
                 echo 'params.var1=' + params.var1
                 sh "echo ${var1}"
                 sh "echo ${params}"
-                sh "export JENKINS_PARAMS='${params}' && source poc-venv/bin/activate && robot pipeline.robot"
+                sh "export JENKINS_PARAMS='${params}' && source poc-venv/bin/activate && invoke all-tasks"
             }
         }
     }
