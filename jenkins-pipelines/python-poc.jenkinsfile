@@ -15,7 +15,7 @@ pipeline {
                description: 'aws|gce',
                name: 'backend')
 
-            string(defaultValue: "eu-west-1'",
+            string(defaultValue: "eu-west-1",
                description: 'Supported: us-east-1|eu-west-1|eu-west-2|eu-north-1|random (randomly select region)',
                name: 'aws_region')
             string(defaultValue: "a",
@@ -40,26 +40,22 @@ pipeline {
         }
 
     stages {
-        stage('Prepare python') {
-            steps {
-                sh "pip3 install virtualenv"
-                sh "python3 -m virtualenv poc-venv"
-                sh "source poc-venv/bin/activate && pip3 install invoke rich"
-            }
-        }
+//         stage('Prepare python') {
+//             steps {
+//                 sh "pip3 install virtualenv"
+//                 sh "python3 -m virtualenv poc-venv"
+//                 sh "source poc-venv/bin/activate && pip3 install invoke rich"
+//             }
+//         }
         stage('Hello') {
             steps {
-                echo 'var1=' + var1
-                echo 'params.var1=' + params.var1
-                sh "echo ${var1}"
-                sh "echo ${params}"
                 sh "export JENKINS_PARAMS='${params}' && source poc-venv/bin/activate && invoke all-tasks"
             }
         }
     }
-    post {
-        always {
-            archiveArtifacts artifacts: 'report.html, log.html, output.xml'
-        }
-    }
+//     post {
+//         always {
+//             archiveArtifacts artifacts: 'report.html, log.html, output.xml'
+//         }
+//     }
 }

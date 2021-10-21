@@ -16,7 +16,7 @@ console = Console(color_system=None)
 @task()
 def all_tasks(ctx):
     print("hello world!")
-    print(ctx["params"])
+    print(f'jenkins params: {ctx["params"]}')
     console.print(os.environ)
 
 
