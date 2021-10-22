@@ -119,7 +119,7 @@ if [[ -n "${CREATE_RUNNER_INSTANCE}" ]]; then
 fi
 
 # if running on Build server
-if [[ ${USER} == "jenkins" ]]; then
+if [[ ${USER} == "jenkins" || ${CI} == "true" ]]; then
     echo "Running on Build Server..."
     HOST_NAME=`hostname`
 else

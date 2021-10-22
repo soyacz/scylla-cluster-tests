@@ -35,7 +35,8 @@ def get_test_duration(ctx):
     params = ctx.persisted.params
     env = prepare_sct_env_variables(params)
     print_sct_env_vars(env)
-    out = ctx.run(f'./docker/env/hydra.sh output-conf -b {params["backend"]}', env=env, hide='out').stdout.strip()
+    out = ctx.run(
+        f'./docker/env/hydra.sh output-conf -b {params["backend"]}', env=env, hide='out', timeout=60).stdout.strip()
     t_par = {
         "test_duration": int(re.search(r'test_duration: ([\d]+)', out).group(1)),
         "test_startup_timeout": 20,
