@@ -46,17 +46,52 @@ pipeline {
                 sh "source poc-venv/bin/activate && pip3 install invoke rich"
             }
         }
-        stage('Clean') {
-            steps {
-                sh "[[ -f persisted_params.json ]] && rm persisted_params.json || echo 'No persisted_params file cleanup needed'"
-                sh "JENKINS_PARAMS='${params}' poc-venv/bin/invoke clean"
+        stage('Checkout') {
+                steps {
+                    script {
+                        completed_stages = [:]
+                    }
+                    dir('scylla-cluster-tests') {
+                        timeout(time: 5, unit: 'MINUTES') {
+                            checkout scm
+
+                            dir("scylla-qa-internal") {
+                                git(url: 'git@github.com:scylladb/scylla-qa-internal.git',
+                                    credentialsId:'b8a774da-0e46-4c91-9f74-09caebaea261',
+                                    branch: 'master')
+                            }
+                        }
+                    }
+                }
             }
-        }
-        stage('Build') {
-            steps {
-                sh "poc-venv/bin/invoke build"
+        stage('Get test duration') {
+                steps {
+                    catchError(stageResult: 'FAILURE') {
+                        timeout(time: 1, unit: 'MINUTES') {
+                            script {
+                                    dir('scylla-cluster-tests') {
+                                        sh "JENKINS_PARAMS='${params}' poc-venv/bin/invoke sct.get-test-duration"
+                                }
+                            }
+                        }
+                    }
+                }
             }
-        }
+//         stage('Create SCT Runner') {
+//                 steps {
+//                     catchError(stageResult: 'FAILURE') {
+//                         script {
+//                             wrap([$class: 'BuildUser']) {
+//                                 dir('scylla-cluster-tests') {
+//                                     timeout(time: 5, unit: 'MINUTES') {
+//                                         createSctRunner(params, runnerTimeout , builder.region)
+//                                     }
+//                                 }
+//                             }
+//                         }
+//                     }
+//                 }
+//             }
         stage('Test') {
             steps {
                 sh "poc-venv/bin/invoke test"

@@ -23,10 +23,12 @@ class PersistedContext:
 
     def _parse_jenkins_params(self):
         raw_jenkins_params = os.getenv("JENKINS_PARAMS")[1:-1]
-        list_params = re.compile(r"(\w+):(\[[^]]+\])")
-        scalar_params = re.compile(r"(\w+):([^,]*)")
-        parsed_params = dict(scalar_params.findall(raw_jenkins_params))
-        for k, v in list_params.findall(raw_jenkins_params):
+        parsed_params = {}
+        scalar_params_patt = re.compile(r"(\w+):([^,]*)")
+        for k, v in scalar_params_patt.findall(raw_jenkins_params):
+            parsed_params[k] = v.strip()
+        list_params_patt = re.compile(r"(\w+):(\[[^]]+\])")
+        for k, v in list_params_patt.findall(raw_jenkins_params):
             parsed_params[k] = json.loads(v)
         return parsed_params
 
