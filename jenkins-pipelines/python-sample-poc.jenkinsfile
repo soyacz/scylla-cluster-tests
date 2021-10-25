@@ -49,7 +49,7 @@ pipeline {
         stage('Clean') {
             steps {
                 sh "[[ -f persisted_params.json ]] && rm persisted_params.json || echo 'No persisted_params file cleanup needed'"
-                sh "JENKINS_PARAMS='${params}' poc-venv/bin/invoke sample.clean"
+                sh "JENKINS_PARAMS='${params}' poc-venv/bin/invoke sample.configure sample.clean"
             }
         }
         stage('Build') {
