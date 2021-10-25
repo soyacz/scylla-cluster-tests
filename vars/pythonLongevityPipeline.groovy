@@ -118,7 +118,7 @@ def call(Map pipelineParams) {
             steps {
                 sh "pip3 install virtualenv"
                 sh "python3 -m virtualenv poc-venv"
-                sh "source poc-venv/bin/activate && pip3 install invoke rich"
+                sh "source poc-venv/bin/activate && pip3 install invoke rich pydantic"
             }
         }
         stage('Checkout') {
