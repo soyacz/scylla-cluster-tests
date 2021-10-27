@@ -118,7 +118,7 @@ def call(Map pipelineParams) {
             steps {
                 sh "pip3 install virtualenv"
                 sh "python3 -m virtualenv poc-venv"
-                sh "source poc-venv/bin/activate && pip3 install invoke rich pydantic"
+                sh "source poc-venv/bin/activate && pip3 install scylla-arms"
             }
         }
         stage('Checkout') {
@@ -141,7 +141,7 @@ def call(Map pipelineParams) {
                     catchError(stageResult: 'FAILURE') {
                         script {
                                 dir('scylla-cluster-tests') {
-                                    sh "JENKINS_PARAMS='${params}' ../poc-venv/bin/invoke sct.get-test-duration"
+                                    sh "JENKINS_PARAMS='${params}' ../poc-venv/bin/arms sct.configure sct.get-test-duration"
                             }
                         }
                     }
