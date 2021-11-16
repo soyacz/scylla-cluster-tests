@@ -14,7 +14,6 @@ def call(Map pipelineParams) {
         environment {
             AWS_ACCESS_KEY_ID     = credentials('qa-aws-secret-key-id')
             AWS_SECRET_ACCESS_KEY = credentials('qa-aws-secret-access-key')
-            SCT_TEST_ID = UUID.randomUUID().toString()
         }
         parameters {
             string(defaultValue: "${pipelineParams.get('backend', 'aws')}",
@@ -113,55 +112,55 @@ def call(Map pipelineParams) {
                    name: 'k8s_scylla_operator_docker_image')
 
         }
-    stages {
-        stage('Prepare python') {
-            steps {
-                sh "pip3 install virtualenv"
-                sh "python3 -m virtualenv poc-venv"
-                sh "source poc-venv/bin/activate && pip3 install scylla-arms"
+        stages {
+            stage('Prepare python') {
+                steps {
+                    sh "pip3 install virtualenv"
+                    sh "python3 -m virtualenv poc-venv"
+                    sh "source poc-venv/bin/activate && pip3 install scylla-arms"
+                }
             }
-        }
-        stage('Checkout') {
-            steps {
-                dir('scylla-cluster-tests') {
-                    timeout(time: 5, unit: 'MINUTES') {
-                        checkout scm
+            stage('Checkout') {
+                steps {
+                    dir('scylla-cluster-tests') {
+                        timeout(time: 5, unit: 'MINUTES') {
+                            checkout scm
 
-                        dir("scylla-qa-internal") {
-                            git(url: 'git@github.com:scylladb/scylla-qa-internal.git',
-                                credentialsId:'b8a774da-0e46-4c91-9f74-09caebaea261',
-                                branch: 'master')
+                            dir("scylla-qa-internal") {
+                                git(url: 'git@github.com:scylladb/scylla-qa-internal.git',
+                                    credentialsId:'b8a774da-0e46-4c91-9f74-09caebaea261',
+                                    branch: 'master')
+                            }
                         }
                     }
                 }
             }
-        }
-        stage('Get test duration') {
-            steps {
-                catchError(stageResult: 'FAILURE') {
-                    script {
-                            dir('scylla-cluster-tests') {
-                                sh "JENKINS_PARAMS='${params}' ../poc-venv/bin/arms sct.configure sct.get-test-duration"
+            stage('Get test duration') {
+                steps {
+                    catchError(stageResult: 'FAILURE') {
+                        script {
+                            wrap([$class: 'BuildUser']) {
+                                dir('scylla-cluster-tests') {
+                                    sh "JENKINS_PARAMS='${params}' ../poc-venv/bin/arms sct.configure sct.get-test-duration"
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-        stage('Create SCT Runner') {
-            steps {
-                catchError(stageResult: 'FAILURE') {
-                    script {
-                        dir('scylla-cluster-tests') {
-                            sh "../poc-venv/bin/arms sct.create-sct-runner --region ${builder.region}"
+            stage('Create SCT Runner') {
+                steps {
+                    catchError(stageResult: 'FAILURE') {
+                        script {
+                            wrap([$class: 'BuildUser']) {
+                                dir('scylla-cluster-tests') {
+                                    sh "../poc-venv/bin/arms sct.create-sct-runner"
+                                }
+                            }
                         }
                     }
                 }
             }
         }
     }
-//     post {
-//         always {
-//             archiveArtifacts artifacts: 'report.html, log.html, output.xml'
-//         }
-//     }
 }
