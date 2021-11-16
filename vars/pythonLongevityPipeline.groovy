@@ -122,46 +122,41 @@ def call(Map pipelineParams) {
             }
         }
         stage('Checkout') {
-                steps {
-                    dir('scylla-cluster-tests') {
-                        timeout(time: 5, unit: 'MINUTES') {
-                            checkout scm
+            steps {
+                dir('scylla-cluster-tests') {
+                    timeout(time: 5, unit: 'MINUTES') {
+                        checkout scm
 
-                            dir("scylla-qa-internal") {
-                                git(url: 'git@github.com:scylladb/scylla-qa-internal.git',
-                                    credentialsId:'b8a774da-0e46-4c91-9f74-09caebaea261',
-                                    branch: 'master')
-                            }
+                        dir("scylla-qa-internal") {
+                            git(url: 'git@github.com:scylladb/scylla-qa-internal.git',
+                                credentialsId:'b8a774da-0e46-4c91-9f74-09caebaea261',
+                                branch: 'master')
                         }
                     }
                 }
             }
+        }
         stage('Get test duration') {
-                steps {
-                    catchError(stageResult: 'FAILURE') {
-                        script {
-                                dir('scylla-cluster-tests') {
-                                    sh "JENKINS_PARAMS='${params}' ../poc-venv/bin/arms sct.configure sct.get-test-duration"
-                            }
+            steps {
+                catchError(stageResult: 'FAILURE') {
+                    script {
+                            dir('scylla-cluster-tests') {
+                                sh "JENKINS_PARAMS='${params}' ../poc-venv/bin/arms sct.configure sct.get-test-duration"
                         }
                     }
                 }
             }
-//         stage('Create SCT Runner') {
-//                 steps {
-//                     catchError(stageResult: 'FAILURE') {
-//                         script {
-//                             wrap([$class: 'BuildUser']) {
-//                                 dir('scylla-cluster-tests') {
-//                                     timeout(time: 5, unit: 'MINUTES') {
-//                                         createSctRunner(params, runnerTimeout , builder.region)
-//                                     }
-//                                 }
-//                             }
-//                         }
-//                     }
-//                 }
-//             }
+        }
+        stage('Create SCT Runner') {
+            steps {
+                catchError(stageResult: 'FAILURE') {
+                    script {
+                        dir('scylla-cluster-tests') {
+                            sh "../poc-venv/bin/arms sct.create-sct-runner --region ${builder.region}"
+                        }
+                    }
+                }
+            }
         }
     }
 //     post {

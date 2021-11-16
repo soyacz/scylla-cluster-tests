@@ -1,11 +1,13 @@
 # pylint: disable=W,C,R
 import os
 import re
+from dataclasses import dataclass, asdict, field
 from enum import Enum
+from pprint import pprint
 from typing import Union, List
 
 from invoke import task, Collection
-from pydantic import validator
+from pydantic import validator, BaseModel
 from scylla_arms.config import Settings
 
 
@@ -16,6 +18,44 @@ def print_sct_env_vars(env):
 class Backends(str, Enum):
     aws: str = "aws"
     gce: str = "gce"
+    aws_siren: str = "aws-siren"
+    k8s_local_kind_aws: str = "k8s-local-kind-aws"
+    k8s_eks: str = "k8s-eks"
+    gce_siren: str = "gce-siren"
+    k8s_local_kind_gce: str = "k8s-local-kind-gce"
+    k8s_gke: str = "k8s-gke"
+    k8s_gce_minikube: str = "k8s-gce-minikube"
+    k8s_local_minikube: str = "k8s-local-minicube"
+    k8s_local_kind: str = "k8s-local-kind"
+
+    # def __str__(self):
+    #     return self.value
+
+
+class CloudProviders(str, Enum):
+    aws: str = "aws"
+    gce: str = "gce"
+    azure: str = "azure"
+
+    @classmethod
+    def from_backend(cls, backend: Union[Backends, str]):
+        backend_providers = {
+            "aws": "aws",
+            "gce": "gce",
+            "azure": "azure",
+            "k8s-eks": "aws",
+            "k8s-gke": "gce",
+            "k8s-local-kind-aws": "aws",
+            "k8s-local-kind-gce": "gce",
+            "k8s-gce-minikube": "gce",
+            "aws-siren": "aws",
+            "gce-siren": "gce",
+        }
+        if isinstance(backend, Backends):
+            provider = backend_providers[backend.value]
+        else:
+            provider = backend_providers[backend]
+        return cls(provider)
 
 
 class SCTSettings(Settings):
@@ -49,7 +89,7 @@ class SCTSettings(Settings):
     k8s_scylla_operator_docker_image: str = ""
 
     @validator('aws_region')
-    def must_be_valid_region(self, v):
+    def must_be_valid_region(cls, v):  # pylint: disable=no-self-argument
         valid_regions = ["us-east-1", "eu-west-1", "eu-west-2", "eu-north-1", "random"]
         if v not in valid_regions:
             raise ValueError(f"Unsupported region. Supported regions: {valid_regions}")
@@ -78,7 +118,28 @@ def prepare_sct_env_variables(params):
 @task
 def configure(ctx):
     settings = SCTSettings()
-    ctx.persisted.update(**settings.dict())
+    test_id = os.getenv("SCT_TEST_ID")
+    if not test_id:
+        raise ValueError("Please provide SCT_TEST_ID env variable")
+    ctx.persisted.update(test_id=test_id, **settings.dict())
+    ctx.persisted.update()
+
+
+@dataclass
+class TestDurationParams:
+    test_duration: int
+    test_startup_timeout: int = 20
+    test_teardown_timeout: int = 40
+    collect_logs_timeout: int = 70
+    resource_cleanup_timeout: int = 30
+    send_email_timeout: int = 5
+    test_run_timeout: int = field(init=False)
+    runner_timeout: int = field(init=False)
+
+    def __post_init__(self):
+        self.test_run_timeout = self.test_startup_timeout + self.test_duration + self.test_teardown_timeout
+        self.runner_timeout = sum([self.test_run_timeout, self.collect_logs_timeout, self.resource_cleanup_timeout,
+                                   self.send_email_timeout])
 
 
 @task
@@ -87,21 +148,38 @@ def get_test_duration(ctx):
     params = ctx.persisted
     env = prepare_sct_env_variables(params)
     print_sct_env_vars(env)
+    print("getting configuration with hydra...", end=" ")
     out = ctx.run(
-        f'./docker/env/hydra.sh output-conf -b {params["backend"]}', env=env, hide='out', timeout=60).stdout.strip()
-    t_par = {
-        "test_duration": int(re.search(r'test_duration: ([\d]+)', out).group(1)),
-        "test_startup_timeout": 20,
-        "test_teardown_timeout": 40,
-        "collect_logs_timeout": 70,
-        "resource_cleanup_timeout": 30,
-        "send_email_timeout": 5,
-    }
-    t_par["test_run_timeout"] = t_par["test_startup_timeout"] + t_par["test_duration"] + t_par["test_teardown_timeout"]
-    t_par["runner_timeout"] = t_par["test_run_timeout"] + t_par["collect_logs_timeout"] + \
-        t_par["resource_cleanup_timeout"] + t_par["send_email_timeout"]
-    ctx.persisted.test_time_params = t_par
-    print(f"test time parameters: \n {t_par}")
+        f'./docker/env/hydra.sh output-conf -b {params.backend}', env=env, hide='out', timeout=60).stdout.strip()
+    print("done")
+    test_time_params = TestDurationParams(test_duration=int(re.search(r'test_duration: ([\d]+)', out).group(1)))
+    ctx.persisted.test_time_params = asdict(test_time_params)
+    pprint(f"test time parameters: \n {ctx.persisted.test_time_params}")
+
+
+@task
+def create_sct_runner(ctx, region):
+    print("Creating SCT Runner...")
+    params = ctx.persisted
+    backend = Backends(params.backend)
+    cloud_provider = CloudProviders.from_backend(backend)
+    if cloud_provider not in ("aws", "gce"):
+        print(f"Currently {cloud_provider} is not supported. Will run on regular builder")
+    instance_type_arg = ""
+
+    if backend == Backends.k8s_local_kind_aws:
+        instance_type_arg = "--instance-type c5.xlarge"
+    elif backend == Backends.k8s_local_kind_gce:
+        instance_type_arg = "--instance-type c5.xlarge"
+    ctx.run(" ".join(["./docker/env/hydra.sh", "create-runner-instance",
+                      "--cloud-provider", cloud_provider,
+                      "--region", region,
+                      "--availability-zone",  params.availability_zone,
+                      instance_type_arg if instance_type_arg else "",
+                      "--test-id", params.test_id,
+                      "--duration", str(params.test_time_params["test_duration"])]),
+            timeout=5*60)
+    print("SCT Runner created!")
 
 
 @task(configure, get_test_duration)
