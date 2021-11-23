@@ -5,7 +5,6 @@ from pprint import pprint
 from invoke import task
 from scylla_arms.config import inject_persistent_models
 from tasks.sct_settings import SCTSettings, TestDurationParams, Backends, CloudProviders
-from tasks.utils import prepare_sct_env_variables
 
 
 def print_sct_env_vars(env):
@@ -23,11 +22,11 @@ def configure(ctx):
 @inject_persistent_models
 def get_test_duration(ctx, params: SCTSettings):
     print("getting test time parameters")
-    env = prepare_sct_env_variables(params)
+    env = params.env
     print_sct_env_vars(env)
     print("getting configuration with hydra...", end=" ")
     out = ctx.run(
-        f'./docker/env/hydra.sh output-conf -b {params.backend}', env=env, hide='out', timeout=60).stdout.strip()
+        f'./docker/env/hydra.sh output-conf -b {params.backend}', env=params.env, hide='out', timeout=60).stdout.strip()
     print("done")
     test_time_params = TestDurationParams(test_duration=int(re.search(r'test_duration: ([\d]+)', out).group(1)))
     pprint(f"test time parameters: \n {test_time_params}")
@@ -39,7 +38,6 @@ def create_sct_runner(ctx, params: SCTSettings, test_duration_params: TestDurati
     print("Creating SCT Runner...")
     backend = Backends(params.backend)
     cloud_provider = CloudProviders.from_backend(backend)
-    env = prepare_sct_env_variables(params)
     if cloud_provider not in ("aws", "gce"):
         print(f"Currently {cloud_provider} is not supported. Will run on regular builder")
     instance_type_arg = ""
@@ -56,10 +54,29 @@ def create_sct_runner(ctx, params: SCTSettings, test_duration_params: TestDurati
                       "--test-id", params.test_id,
                       "--duration", str(test_duration_params.test_duration)]),
             timeout=5 * 60,
-            env=env)
+            env=params.env)
     print("SCT Runner created!")
 
 
-@task(configure, get_test_duration, create_sct_runner)
+@task
+@inject_persistent_models
+def run_sct_test(ctx, params: SCTSettings, test_duration_params: TestDurationParams):
+    print("unlink latest results")
+    ctx.run("rm -fv ./latest")
+    print("getting runner ip...")
+    runner_ip = ctx.run("cat sct_runner_ip||echo ''").stdout
+    test_cmd = "run-pytest" if params.functional_test else "run-test"
+    common_command_params = f"{test_cmd} {params.test_name} --backend {params.backend}"
+    if runner_ip:
+        print("Running test on runner...")
+        command_params = f"--execute-on-runner {runner_ip} {common_command_params}"
+    else:
+        print("Running test on localhost..")
+        command_params = f'{common_command_params} --logdir "`pwd`"'
+    ctx.run(f"./docker/env/hydra.sh {command_params}", timeout=test_duration_params.test_run_timeout, env=params.env)
+    print("Test ended")
+
+
+@task(configure, get_test_duration, create_sct_runner, run_sct_test)
 def all_tasks(ctx):
     print("All tasks completed successfully")

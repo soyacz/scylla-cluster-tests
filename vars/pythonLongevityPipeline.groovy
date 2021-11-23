@@ -110,6 +110,9 @@ def call(Map pipelineParams) {
             string(defaultValue: "${pipelineParams.get('k8s_scylla_operator_docker_image', '')}",
                    description: 'Scylla Operator docker image',
                    name: 'k8s_scylla_operator_docker_image')
+            string(defaultValue: "${pipelineParams.get('functional_test', 'false')}",
+                   description: 'functional test - leave as default',
+                   name: 'functional_test')
 
         }
         stages {
@@ -155,6 +158,19 @@ def call(Map pipelineParams) {
                             wrap([$class: 'BuildUser']) {
                                 dir('scylla-cluster-tests') {
                                     sh "../poc-venv/bin/arms sct.create-sct-runner"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            stage('Run SCT Test') {
+                steps {
+                    catchError(stageResult: 'FAILURE') {
+                        script {
+                            wrap([$class: 'BuildUser']) {
+                                dir('scylla-cluster-tests') {
+                                        sh "../poc-venv/bin/arms sct.run-sct-test"
                                 }
                             }
                         }
