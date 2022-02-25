@@ -48,8 +48,8 @@ class AzureNode(cluster.BaseNode):
                 "NodeIndex": str(self.node_index), }
 
     def _set_keep_alive(self) -> bool:
-        # todo lukasz: no setting keep alive for now. To be added later.
-        return False
+        self._instance.add_tags({"keep": "alive"})
+        return super()._set_keep_alive()
 
     def _refresh_instance_state(self):
         ip_tuple = (self._instance.public_ip_address, self._instance.private_ip_address)
