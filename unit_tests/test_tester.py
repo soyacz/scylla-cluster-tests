@@ -23,7 +23,8 @@ from time import sleep
 
 from sdcm.sct_events import Severity
 from sdcm.sct_events.health import ClusterHealthValidatorEvent
-from sdcm.tester import ClusterTester, silence, TestResultEvent
+from sdcm.tester import ClusterTester, TestResultEvent
+from sdcm.silence import silence
 from sdcm.sct_config import SCTConfiguration
 from sdcm.utils.log import MultilineMessagesFormatter, configure_logging
 from sdcm.sct_events.system import TestFrameworkEvent

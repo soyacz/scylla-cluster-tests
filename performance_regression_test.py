@@ -18,6 +18,7 @@ import os
 import time
 import yaml
 
+from sdcm.silence import silence
 from sdcm.tester import ClusterTester
 
 KB = 1024
@@ -248,6 +249,10 @@ class PerformanceRegressionTest(ClusterTester):  # pylint: disable=too-many-publ
             time.sleep(interval * 60)  # Sleeping one interval (in minutes) before starting the nemesis
             self.db_cluster.add_nemesis(nemesis=self.get_nemesis_class(), tester_obj=self)
             self.db_cluster.start_nemesis(interval=interval)
+        time.sleep(600)  # wait 10 minutes for nemesis to start
+        self.db_cluster.stop_nemesis(timeout=None)  # wait for Nemesis to end and don't start another cycle
+        with silence(parent=self, name="Kill Stress Threads"):
+            self.loaders.kill_stress_thread()
         results = self.get_stress_results(queue=stress_queue)
         self.update_test_details(scrap_metrics_step=60)
         self.display_results(results, test_name='test_latency' if not nemesis else 'test_latency_with_nemesis')
