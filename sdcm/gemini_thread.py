@@ -15,7 +15,6 @@ import logging
 import concurrent.futures
 import os
 import uuid
-import random
 import json
 import time
 
@@ -82,7 +81,7 @@ class GeminiStressThread:  # pylint: disable=too-many-instance-attributes
         seed = self.params.get('gemini_seed')
         table_options = self.params.get('gemini_table_options')
         if not seed:
-            seed = random.randint(1, 100)
+            seed = 58
         test_nodes = ",".join(self.test_cluster.get_node_cql_ips())
         oracle_nodes = ",".join(self.oracle_cluster.get_node_cql_ips()) if self.oracle_cluster else None
 
