@@ -13,4 +13,4 @@ nemesis_interval: 1
 user_prefix: 'longevity-mini-test'
 space_node_threshold: 6442
 
-append_scylla_args: '--memory 4G'
+append_scylla_args: '--memory 4G --smp 2'
