@@ -20,6 +20,7 @@ from sdcm.provision import provisioner_factory
 from sdcm.provision.provisioner import PricingModel, VmInstance, ProvisionError, Provisioner, InstanceDefinition
 from sdcm.sct_config import SCTConfiguration
 from sdcm.sct_provision import instances_request_builder
+from sdcm.test_config import TestConfig
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,16 +31,33 @@ def provision_with_retry(provisioner: Provisioner, definitions: List[InstanceDef
     return provisioner.get_or_create_instances(definitions=definitions, pricing_model=pricing_model)
 
 
-def provision_sct_resources(sct_config: SCTConfiguration, **provisioner_config: Any):
+def provision_instances_with_fallback(provisioner: Provisioner, definitions: List[InstanceDefinition], pricing_model: PricingModel,
+                                      fallback_on_demand: bool
+                                      ) -> List[VmInstance]:
+    try:
+        provision_with_retry(provisioner, definitions=definitions, pricing_model=pricing_model)
+    except ProvisionError:
+        if pricing_model.is_spot() and fallback_on_demand:
+            provision_with_retry(provisioner, definitions=definitions, pricing_model=PricingModel.ON_DEMAND)
+        else:
+            raise
+
+    provisioned_instances = provisioner.get_or_create_instances(definitions=definitions)
+    for v_m in provisioned_instances:
+        v_m.wait_cloud_init_completes()
+        # todo: download cloud-init logs
+    return provisioned_instances
+
+
+def provision_sct_resources(sct_config: SCTConfiguration, test_config: TestConfig, **provisioner_config: Any):
     """Provisions instances according to SCT Configuration."""
-    definitions_per_region = instances_request_builder.build(sct_config=sct_config)
-    pricing_model = PricingModel(sct_config.get("instance_provision"))
-    provision_fallback_on_demand = sct_config.get("instance_provision_fallback_on_demand")
+    definitions_per_region = instances_request_builder.build(sct_config=sct_config, test_config=test_config)
     for request in definitions_per_region:
         provisioner = provisioner_factory.create_provisioner(backend=request.backend,
                                                              test_id=request.test_id,
                                                              region=request.region,
                                                              **provisioner_config)
+<<<<<<< HEAD
         try:
             provision_with_retry(provisioner, definitions=request.definitions, pricing_model=pricing_model)
         except ProvisionError:
@@ -47,3 +65,9 @@ def provision_sct_resources(sct_config: SCTConfiguration, **provisioner_config: 
                 provision_with_retry(provisioner, definitions=request.definitions, pricing_model=PricingModel.ON_DEMAND)
             else:
                 raise
+=======
+        provision_instances_with_fallback(provisioner=provisioner,
+                                          definitions=request.definitions,
+                                          pricing_model=PricingModel(sct_config.get("instance_provision")),
+                                          fallback_on_demand=sct_config.get("instance_provision_fallback_on_demand"))
+>>>>>>> feature(azure): provision with user data

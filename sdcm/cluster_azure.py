@@ -12,13 +12,14 @@
 # Copyright (c) 2022 ScyllaDB
 
 import logging
-from functools import cached_property
 from typing import Dict, List
 
 from sdcm import cluster
-from sdcm.keystore import KeyStore
+
 from sdcm.provision.azure.provisioner import AzureProvisioner
 from sdcm.provision.provisioner import InstanceDefinition, PricingModel, VmInstance
+from sdcm.sct_provision.azure.azure_instance_request_definition_builder import generate_instance_definition_params
+from sdcm.sct_provision.instances_provider import provision_instances_with_fallback
 from sdcm.utils.decorators import retrying
 
 LOGGER = logging.getLogger(__name__)
@@ -36,16 +37,16 @@ class AzureNode(cluster.BaseNode):
 
     log = LOGGER
 
-    def __init__(self, azure_instance: VmInstance,  # pylint: disable=too-many-arguments
+    def __init__(self, azure_instance: 'VmInstance',  # pylint: disable=too-many-arguments
                  credentials, parent_cluster,
-                 node_prefix='node', node_index=1, user_name='root',
+                 node_prefix='node', node_index=1,
                  base_logdir=None, dc_idx=0):
         region = parent_cluster.params.get('azure_region_name')[dc_idx]
         name = f"{node_prefix}-{region}-{node_index}".lower()
         self.node_index = node_index
-        self._instance: VmInstance = azure_instance
+        self._instance = azure_instance
         ssh_login_info = {'hostname': None,
-                          'user': user_name,
+                          'user': azure_instance.user_name,
                           'key_file': credentials.key_file,
                           'extra_ssh_options': '-tt'}
         super().__init__(name=name,
@@ -55,10 +56,9 @@ class AzureNode(cluster.BaseNode):
                          node_prefix=node_prefix,
                          dc_idx=dc_idx)
 
-    @cached_property
+    @property
     def tags(self) -> Dict[str, str]:
-        return {**super().tags,
-                "NodeIndex": str(self.node_index), }
+        return self._instance.tags
 
     @retrying(n=6, sleep_time=1)
     def _set_keep_alive(self) -> bool:
@@ -124,6 +124,10 @@ class AzureNode(cluster.BaseNode):
     def _get_private_ip_address(self) -> str | None:
         return self._instance.private_ip_address
 
+    def configure_remote_logging(self):
+        """Remote logging configured upon vm provisioning"""
+        return
+
 
 class AzureCluster(cluster.BaseCluster):   # pylint: disable=too-many-instance-attributes
     def __init__(self, image_id, root_disk_size,  # pylint: disable=too-many-arguments, too-many-locals
@@ -171,7 +175,6 @@ class AzureCluster(cluster.BaseCluster):   # pylint: disable=too-many-instance-a
             node = AzureNode(azure_instance=instance,
                              credentials=self._credentials[0],
                              parent_cluster=self,
-                             user_name=self._user_name,
                              node_prefix=self.node_prefix,
                              node_index=node_index,
                              base_logdir=self.logdir,
@@ -181,28 +184,21 @@ class AzureCluster(cluster.BaseCluster):   # pylint: disable=too-many-instance-a
         except Exception as ex:
             raise CreateAzureNodeError('Failed to create node: %s' % ex) from ex
 
-    def _create_instances(self, count, dc_idx=0):
+    def _create_instances(self, count, dc_idx=0) -> List[VmInstance]:
         region = self.params.get('azure_region_name')[dc_idx]
         assert region, "no region provided, please add `azure_region_name` param"
         pricing_model = PricingModel.SPOT if 'spot' in self.instance_provision else PricingModel.ON_DEMAND
-        instances = []
+        definitions = []
         for node_index in range(self._node_index + 1, self._node_index + count + 1):
-            instance_definition = InstanceDefinition(
-                name=f"{self._node_prefix}-{region}-{node_index}".lower(),
-                image_id=self._image_id,
-                type=self._instance_type,
-                user_name=self._user_name,
-                tags=self.tags,
-                ssh_public_key=KeyStore().get_gce_ssh_key_pair().public_key.decode()
-            )
-            instances.append(self._provision_instance(instance_definition=instance_definition,
-                                                      pricing_model=pricing_model, dc_idx=dc_idx))
-        return instances
-
-    @retrying(n=3, sleep_time=1)
-    def _provision_instance(self, instance_definition: InstanceDefinition, pricing_model: PricingModel, dc_idx: int):
-        return self.provisioners[dc_idx].get_or_create_instance(definition=instance_definition,
-                                                                pricing_model=pricing_model)
+            node_type = self.node_type if "db" not in self.node_type else "db"
+            instance_definition = InstanceDefinition(**generate_instance_definition_params(self.params,
+                                                                                           test_config=self.test_config,
+                                                                                           node_type=node_type,
+                                                                                           region=region,
+                                                                                           index=node_index))
+            definitions.append(instance_definition)
+        return provision_instances_with_fallback(self.provisioners[dc_idx], definitions=definitions, pricing_model=pricing_model,
+                                                 fallback_on_demand=self.params.get("instance_provision_fallback_on_demand"))
 
     def get_node_ips_param(self, public_ip=True):
         # todo lukasz: why gce cluster didn't have to implement this?

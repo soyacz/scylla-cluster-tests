@@ -14,7 +14,12 @@
 from abc import ABC
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Optional
+from functools import cached_property
+from typing import List, Dict
+
+from sdcm.keystore import SSHKey, KeyStore
+from sdcm.provision.helpers.cloud_init import wait_cloud_init_completes
+from sdcm.provision.user_data import UserDataObject
 
 
 class VmArch(Enum):
@@ -34,12 +39,14 @@ class InstanceDefinition:  # pylint: disable=too-many-instance-attributes
     name: str
     image_id: str
     type: str   # instance_type from yaml
-    user_name: Optional[str] = None
-    ssh_public_key: Optional[str] = field(default=None, repr=False)
+    user_name: str
+    ssh_key: SSHKey = field(repr=False)
     tags: Dict[str, str] = field(default_factory=dict)
     arch: VmArch = VmArch.X86
-    root_disk_size: Optional[int] = None
-    data_disks: Optional[List[DataDisk]] = None
+    root_disk_size: int | None = None
+    data_disks: List[DataDisk] | None = None
+    user_data: List[UserDataObject] | None = field(
+        default_factory=list, repr=False)  # None when no cloud-init use at all
 
 
 class ProvisionError(Exception):
@@ -62,12 +69,18 @@ class VmInstance:  # pylint: disable=too-many-instance-attributes
     name: str
     region: str
     user_name: str
+    ssh_key_name: str
     public_ip_address: str
     private_ip_address: str
     tags: Dict[str, str]
     pricing_model: PricingModel
     image: str
     _provisioner: "Provisioner"
+
+    @cached_property
+    def ssh_private_key(self) -> str:
+        key = KeyStore().get_ssh_key_pair(name=self.ssh_key_name)
+        return key.private_key.decode()
 
     def terminate(self, wait=True):
         """terminates VM instance.
@@ -84,6 +97,12 @@ class VmInstance:  # pylint: disable=too-many-instance-attributes
         """Adds tags to the instance."""
         self._provisioner.add_instance_tags(self.name, tags)
         self.tags.update(tags)
+
+    def wait_cloud_init_completes(self) -> None:
+        """Waits until VM instance is ready to be used.
+
+        It means all user_data scripts executed without errors."""
+        wait_cloud_init_completes(instance=self)
 
 
 class Provisioner(ABC):

@@ -10,7 +10,7 @@
 # See LICENSE for more details.
 #
 # Copyright (c) 2022 ScyllaDB
-
+import base64
 import logging
 import os
 from dataclasses import dataclass, field
@@ -22,6 +22,7 @@ from azure.core.exceptions import ResourceNotFoundError
 from azure.mgmt.compute.models import VirtualMachine
 
 from sdcm.provision.provisioner import InstanceDefinition, PricingModel
+from sdcm.provision.user_data import UserDataBuilder
 from sdcm.utils.azure_utils import AzureService
 
 LOGGER = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ class VirtualMachineProvider:
         LOGGER.info("Instance params: %s", definition)
         params = {
             "location": self._region,
-            "tags": definition.tags,
+            "tags": definition.tags | {"ssh_user": definition.user_name, "ssh_key": definition.ssh_key.name},
             "hardware_profile": {
                 "vm_size": definition.type,
             },
@@ -63,14 +64,17 @@ class VirtualMachineProvider:
                 }],
             },
         }
-        if definition.user_name is None:
-            # in case we use specialized image, we don't change things like computer_name, usernames, ssh_keys
+        if definition.user_data is None:
+            # when user_data is None, we assume specialized VM image
+            # in that case, we don't change things like computer_name, usernames, ssh_keys
             os_profile = {}
         else:
+            user_data = UserDataBuilder(user_data_objects=definition.user_data).build_user_data_yaml()
             os_profile = self._get_os_profile(computer_name=definition.name,
                                               admin_username=definition.user_name,
                                               admin_password=binascii.hexlify(os.urandom(20)).decode(),
-                                              ssh_public_key=definition.ssh_public_key)
+                                              ssh_public_key=definition.ssh_key.public_key.decode(),
+                                              user_data=user_data)
         storage_profile = self._get_scylla_storage_profile(image_id=definition.image_id, name=definition.name,
                                                            disk_size=definition.root_disk_size)
         params.update(os_profile)
@@ -131,11 +135,12 @@ class VirtualMachineProvider:
 
     @staticmethod
     def _get_os_profile(computer_name: str, admin_username: str,
-                        admin_password: str, ssh_public_key: str):
+                        admin_password: str, ssh_public_key: str, user_data: str):
         os_profile = {"os_profile": {
             "computer_name": computer_name,
             "admin_username": admin_username,
-            "admin_password": admin_password if admin_password else binascii.hexlify(os.urandom(20)).decode(),
+            "admin_password": admin_password,
+            "custom_data": base64.b64encode(user_data.encode('utf-8')).decode('latin-1'),
             "linux_configuration": {
                 "disable_password_authentication": True,
                 "ssh": {

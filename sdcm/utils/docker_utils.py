@@ -377,7 +377,7 @@ class ContainerManager:  # pylint: disable=too-many-public-methods)
 
         LOGGER.debug("Build arguments for Docker image `%s':\n%s,", image_tag, pformat(build_args, indent=8))
         try:
-            image, logs = docker_client.images.build(tag=image_tag, **dockerfile_args, **build_args)
+            image, logs = docker_client.images.build(None, **dockerfile_args, **build_args)
         except BuildError as docker_build_error:
             LOGGER.critical("Build log:\n%s",
                             "\n".join(item['stream'] for item in docker_build_error.build_log if "stream" in item))
