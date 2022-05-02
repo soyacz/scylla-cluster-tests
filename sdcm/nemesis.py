@@ -1332,41 +1332,21 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
 
     def call_random_disrupt_method(self, disrupt_methods=None, predefined_sequence=False):
         # pylint: disable=too-many-branches
-
         if disrupt_methods is None:
-            disrupt_methods = [attr[1] for attr in inspect.getmembers(self) if
-                               attr[0].startswith('disrupt_') and
-                               callable(attr[1])]
-        else:
-            disrupt_methods = [attr[1] for attr in inspect.getmembers(self) if
-                               attr[0] in disrupt_methods and
-                               callable(attr[1])]
-        if not disrupt_methods:
-            self.log.warning("No monkey to run")
-            return
-        if not predefined_sequence:
-            disrupt_method = random.choice(disrupt_methods)
-        else:
-            if not self._random_sequence:
-                # Generate random sequence, every method has same chance to be called.
-                # Here we use multiple original methods list, it will increase the chance
-                # to call same method continuously.
-                #
-                # Adjust the rate according to the test duration. Try to call more unique
-                # methods and don't wait to long time to meet the balance if the test
-                # duration is short.
-                test_duration = self.cluster.params.get('test_duration')
-                if test_duration < 600:  # less than 10 hours
-                    rate = 1
-                elif test_duration < 4320:  # less than 3 days
-                    rate = 2
-                else:
-                    rate = 3
-                multiple_disrupt_methods = disrupt_methods * rate
-                random.shuffle(multiple_disrupt_methods)
-                self._random_sequence = multiple_disrupt_methods
-            # consume the random sequence
-            disrupt_method = self._random_sequence.pop()
+            disrupt_methods = [self.disrupt_nodetool_cleanup,
+                               self.disrupt_network_block,
+                               self.disrupt_run_cdcstressor_tool,
+                               self.disrupt_restart_with_resharding,
+                               self.disrupt_abort_repair,
+                               self.disrupt_switch_between_password_authenticator_and_saslauthd_authenticator_and_back,
+                               self.disrupt_terminate_and_replace_node_kubernetes,
+                               self.disrupt_modify_table,
+                               self.disrupt_ldap_connection_toggle,
+                               self.disrupt_start_stop_validation_compaction,
+                               self.disrupt_terminate_and_replace_node
+                               ]
+            self.disrupt_methods = disrupt_methods
+        disrupt_method = self.disrupt_methods.pop()
 
         self.execute_disrupt_method(disrupt_method)
 
