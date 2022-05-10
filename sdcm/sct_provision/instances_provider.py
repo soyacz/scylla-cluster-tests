@@ -17,7 +17,9 @@ from typing import List, Any
 from tenacity import retry, stop_after_attempt
 
 from sdcm.provision import provisioner_factory
+from sdcm.provision.helpers.cloud_init import wait_cloud_init_completes
 from sdcm.provision.provisioner import PricingModel, VmInstance, ProvisionError, Provisioner, InstanceDefinition
+from sdcm.remote import RemoteCmdRunnerBase
 from sdcm.sct_config import SCTConfiguration
 from sdcm.sct_provision import instances_request_builder
 from sdcm.test_config import TestConfig
@@ -44,7 +46,11 @@ def provision_instances_with_fallback(provisioner: Provisioner, definitions: Lis
 
     provisioned_instances = provisioner.get_or_create_instances(definitions=definitions)
     for v_m in provisioned_instances:
-        v_m.wait_cloud_init_completes()
+        ssh_login_info = {'hostname': v_m.public_ip_address,
+                          'user': v_m.user_name,
+                          'key_file': f"~/.ssh/{v_m.ssh_key_name}"}
+        remoter = RemoteCmdRunnerBase.create_remoter(**ssh_login_info)
+        wait_cloud_init_completes(remoter=remoter, instance=v_m)
         # todo: download cloud-init logs
     return provisioned_instances
 

@@ -14,13 +14,18 @@
 import os
 import logging
 import collections
+import re
 from pathlib import Path
+from typing import Optional, List, Dict, Pattern
 
 import pytest
+from invoke import Result
 
 from sdcm import wait
 from sdcm.cluster import BaseNode
 from sdcm.prometheus import start_metrics_server
+from sdcm.remote import RemoteCmdRunnerBase
+from sdcm.remote.libssh2_client import StreamWatcher
 from sdcm.utils.docker_remote import RemoteDocker
 
 from unit_tests.dummy_remote import LocalNode, LocalScyllaClusterDummy
@@ -82,3 +87,49 @@ def docker_scylla():
     yield scylla
 
     scylla.kill()
+
+
+class FakeRemoter(RemoteCmdRunnerBase):
+    """Fake remoter that responds to commands as described in `result_map` class attribute."""
+
+    result_map: Dict[Pattern, Result] = {}
+
+    def run(self,  # pylint: disable=too-many-arguments
+            cmd: str,
+            timeout: Optional[float] = None,
+            ignore_status: bool = False,
+            verbose: bool = True,
+            new_session: bool = False,
+            log_file: Optional[str] = None,
+            retry: int = 1,
+            watchers: Optional[List[StreamWatcher]] = None,
+            change_context: bool = False
+            ) -> Result:
+        for pattern, result in self.result_map.items():
+            if re.match(pattern, cmd) is not None:
+                if ignore_status is True:
+                    return result
+                else:
+                    if result.failed:
+                        raise Exception(f"Exception occurred when running command: {cmd}")
+                    return result
+        raise ValueError(f"No fake result specified for command: {cmd}."
+                         f"Set {self.__class__.__name__}.result_map variable with Dict[Pattern, Result] mapping")
+
+    def _create_connection(self):
+        pass
+
+    def _close_connection(self):
+        pass
+
+    def is_up(self, timeout: float = 30):
+        return True
+
+    def _run_on_retryable_exception(self, exc: Exception, new_session: bool) -> bool:
+        return True
+
+
+@pytest.fixture
+def fake_remoter():
+    RemoteCmdRunnerBase.set_default_remoter_class(FakeRemoter)
+    return FakeRemoter

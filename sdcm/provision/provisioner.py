@@ -18,7 +18,6 @@ from functools import cached_property
 from typing import List, Dict
 
 from sdcm.keystore import SSHKey, KeyStore
-from sdcm.provision.helpers.cloud_init import wait_cloud_init_completes
 from sdcm.provision.user_data import UserDataObject
 
 
@@ -97,12 +96,6 @@ class VmInstance:  # pylint: disable=too-many-instance-attributes
         """Adds tags to the instance."""
         self._provisioner.add_instance_tags(self.name, tags)
         self.tags.update(tags)
-
-    def wait_cloud_init_completes(self) -> None:
-        """Waits until VM instance is ready to be used.
-
-        It means all user_data scripts executed without errors."""
-        wait_cloud_init_completes(instance=self)
 
 
 class Provisioner(ABC):
