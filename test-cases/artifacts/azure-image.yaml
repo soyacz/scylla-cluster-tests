@@ -9,6 +9,7 @@ azure_instance_type_db: 'Standard_L8s_v2'
 #azure_n_local_ssd_disk_db: 1
 instance_provision: "spot"
 instance_provision_fallback_on_demand: false  # todo lukasz: add support for fallback on demand for azure
+ssh_transport: 'fabric'
 logs_transport: 'ssh'
 n_db_nodes: 1
 n_loaders: 0
