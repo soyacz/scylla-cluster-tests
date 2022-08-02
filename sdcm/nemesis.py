@@ -3571,12 +3571,12 @@ class AddDropColumnMonkey(Nemesis):
         self.disrupt_add_drop_column()
 
 
-class ToggleTableIcsMonkey(Nemesis):
-    kubernetes = True
-
-    @log_time_elapsed_and_status
-    def disrupt(self):
-        self.disrupt_toggle_table_ics()
+# class ToggleTableIcsMonkey(Nemesis):
+#     kubernetes = True
+#
+#     @log_time_elapsed_and_status
+#     def disrupt(self):
+#         self.disrupt_toggle_table_ics()
 
 
 class MgmtBackup(Nemesis):

@@ -1,10 +1,10 @@
-test_duration: 180
+test_duration: 380
 
-stress_cmd:      "scylla-bench -workload=uniform -mode=counter_update -replication-factor=3 -partition-count=1000 -clustering-row-count=10 -concurrency 64 -duration 180m -validate-data"
-stress_read_cmd: "scylla-bench -workload=uniform -mode=counter_read   -replication-factor=3 -partition-count=1000 -clustering-row-count=10 -concurrency 16 -duration 180m -validate-data"
+prepare_write_cmd:      "scylla-bench -workload=sequential -mode=counter_update -replication-factor=3 -partition-count=1000 -clustering-row-count=1000 -concurrency 48 -validate-data"
+stress_read_cmd: "scylla-bench -workload=uniform -mode=counter_read   -replication-factor=3 -partition-count=1000 -clustering-row-count=1000 -concurrency 1500 -duration 180m -validate-data"
 
 n_db_nodes: 4
-n_loaders:  1
+n_loaders:  6
 n_monitor_nodes: 1
 
 instance_type_db: 'i3.2xlarge'
@@ -13,7 +13,8 @@ user_prefix: longevity-counters-3h
 
 space_node_threshold: 6442
 
-nemesis_class_name: 'ChaosMonkey'
+nemesis_class_name: 'NoOpMonkey'
+nemesis_seed: '032'
 nemesis_interval: 5
 
 use_mgmt: true

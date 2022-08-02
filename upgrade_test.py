@@ -23,6 +23,7 @@ from pkg_resources import parse_version
 from sdcm import wait
 from sdcm.fill_db_data import FillDatabaseData
 from sdcm.sct_events.filters import DbEventsFilter
+from sdcm.utils.common import download_dir_from_cloud
 from sdcm.utils.version_utils import is_enterprise, get_node_supported_sstable_versions
 from sdcm.sct_events.system import InfoEvent
 from sdcm.sct_events.database import IndexSpecialColumnErrorEvent, DatabaseLogEvent
@@ -152,7 +153,7 @@ class UpgradeTest(FillDatabaseData):
         # pylint: disable=too-many-branches,too-many-statements
         new_scylla_repo = self.params.get('new_scylla_repo')
         new_version = self.params.get('new_version')
-        upgrade_node_packages = self.params.get('upgrade_node_packages')
+        upgrade_node_packages = download_dir_from_cloud(self.params.get('upgrade_node_packages'))
 
         self.log.info('Upgrading a Node')
         node.upgrade_system()
@@ -166,9 +167,9 @@ class UpgradeTest(FillDatabaseData):
             # update_scylla_packages
             node.remoter.send_files(upgrade_node_packages, '/tmp/scylla', verbose=True)
             # node.remoter.run('sudo yum update -y --skip-broken', connect_timeout=900)
-            node.remoter.run('sudo yum install python34-PyYAML -y')
+            # node.remoter.run('sudo yum install python34-PyYAML -y')
             # replace the packages
-            node.remoter.run(r'rpm -qa scylla\*')
+            # node.remoter.run(r'rpm -qa scylla\*')
             # flush all memtables to SSTables
             node.run_nodetool("drain", timeout=3600, coredump_on_timeout=True)
             node.run_nodetool("snapshot")
@@ -177,7 +178,7 @@ class UpgradeTest(FillDatabaseData):
             node.remoter.run('sudo rpm -UvhR --oldpackage /tmp/scylla/*development*', ignore_status=True)
             # and all the rest
             node.remoter.run('sudo rpm -URvh --replacefiles /tmp/scylla/*.rpm | true')
-            node.remoter.run(r'rpm -qa scylla\*')
+            # node.remoter.run(r'rpm -qa scylla\*')
         elif new_scylla_repo:
             # backup the data
             node.remoter.run('sudo cp /etc/scylla/scylla.yaml /etc/scylla/scylla.yaml-backup')
