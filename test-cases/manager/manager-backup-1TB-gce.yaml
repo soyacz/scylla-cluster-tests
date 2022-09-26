@@ -36,3 +36,4 @@ scylla_linux_distro_loader: 'centos'
 space_node_threshold: 644245094
 
 nemesis_during_prepare: false
+use_preinstalled_scylla: true
