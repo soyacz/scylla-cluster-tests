@@ -11,4 +11,6 @@ upgrade_sstables: false
 n_loaders: 2
 round_robin: true
 
+user_prefix: 'rolling-upgrade-sla'
+
 service_level_shares: [200, 800]
