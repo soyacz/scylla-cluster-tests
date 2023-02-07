@@ -28,7 +28,8 @@ def call(String backend, String region=null, String datacenter=null, String loca
                           'gce-us-west1': "${gcp_project}-builders-us-west1-template",
                           'gce': "${gcp_project}-builders-us-east1-template",
                           'aws': 'aws-sct-builders-eu-west-1-v2-asg',
-                          'azure-eastus': 'azure-sct-builders']
+                          'azure-eastus': 'azure-sct-builders',
+                          'azure-eastus2': 'azure-sct-builders']
 
     def cloud_provider = getCloudProviderFromBackend(backend)
 
@@ -41,7 +42,7 @@ def call(String backend, String region=null, String datacenter=null, String loca
             supported_regions = ["us-east1", "us-west1"]
             region = datacenter
         } else {
-            supported_regions = ["eastus"]
+            supported_regions = ["eastus", "eastus2"]
             region = location
         }
 
