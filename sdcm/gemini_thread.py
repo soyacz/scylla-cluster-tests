@@ -107,7 +107,8 @@ class GeminiStressThread(DockerBasedStressThread):  # pylint: disable=too-many-i
 
         docker = cleanup_context = RemoteDocker(loader, self.docker_image_name,
                                                 extra_docker_opts=f'{cpu_options} --label shell_marker={self.shell_marker}'
-                                                                  f' --network=host --entrypoint=""')
+                                                                  f' --network=host --entrypoint="" '
+                                                                  f'--mount type=tmpfs,destination=/gemini-python/.gemini,tmpfs-size=4G')
 
         if not os.path.exists(loader.logdir):
             os.makedirs(loader.logdir, exist_ok=True)
