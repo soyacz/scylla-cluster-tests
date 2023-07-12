@@ -9,7 +9,6 @@ n_db_nodes: '3 3 3'
 n_loaders:  '1 1 1'
 n_monitor_nodes: 1
 
-simulated_racks: 3
 instance_type_db: 'i3.2xlarge'
 
 user_prefix: longevity-counters-multidc
