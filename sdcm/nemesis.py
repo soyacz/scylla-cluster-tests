@@ -4498,7 +4498,7 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             self.unset_current_running_nemesis(cql_query_executor_node)
 
     def disrupt_toggle_audit_syslog(self):
-        self._disrupt_toggle_audit(store="syslog")
+        self._disrupt_toggle_audit(store="table")
 
     def _disrupt_toggle_audit(self, store: AuditStore):
         """
