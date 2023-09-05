@@ -1,5 +1,6 @@
-test_duration: 180
-stress_cmd: ["cassandra-stress write cl=QUORUM duration=90m -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3)' -mode cql3 native -rate threads=50 -pop seq=1..10000000 -log interval=5"]
+test_duration: 300
+pre_create_keyspace: "CREATE KEYSPACE keyspace1 WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': '3', 'initial_tablets': 8};"
+stress_cmd: ["cassandra-stress write cl=QUORUM duration=250m -schema 'replication(strategy=NetworkTopologyStrategy,replication_factor=3)' -mode cql3 native -rate threads=50 -pop seq=1..10000000 -log interval=5"]
 
 n_db_nodes: 4
 n_loaders: 1
@@ -8,9 +9,14 @@ n_monitor_nodes: 1
 instance_type_db: 'i4i.large'
 
 nemesis_class_name: 'SisyphusMonkey'
-nemesis_interval: 1
+nemesis_interval: 5
+nemesis_selector: ['topology_changes', "!kubernetes"]
+nemesis_multiply_factor: 1
 
 user_prefix: 'longevity-mini-test'
 space_node_threshold: 6442
 
 append_scylla_args: '--memory 4G --blocked-reactor-notify-ms 25 --abort-on-lsa-bad-alloc 1 --abort-on-seastar-bad-alloc --abort-on-internal-error 1 --abort-on-ebadf 1 --enable-sstable-key-validation 1'
+experimental_features:
+  - tablets
+  - consistent-topology-changes
