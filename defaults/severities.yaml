@@ -102,7 +102,7 @@ SoftTimeoutEvent: ERROR
 ElasticsearchEvent: ERROR
 SpotTerminationEvent: CRITICAL
 ScyllaRepoEvent: WARNING
-InfoEvent: ERROR
+InfoEvent: CRITICAL
 ThreadFailedEvent: ERROR
 CoreDumpEvent: ERROR
 TestResultEvent: ERROR
