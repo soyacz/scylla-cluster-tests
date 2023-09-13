@@ -1,0 +1,6 @@
+experimental: true
+append_scylla_yaml: |
+  experimental_features:
+    - tablets
+    - consistent-topology-changes
+pre_create_keyspace: ["CREATE KEYSPACE keyspace1 WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': '3', 'initial_tablets': 64};"]

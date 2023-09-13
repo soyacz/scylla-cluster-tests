@@ -217,6 +217,9 @@ class PerformanceRegressionTest(ClusterTester):  # pylint: disable=too-many-publ
 
     def preload_data(self, compaction_strategy=None):
         # if test require a pre-population of data
+        with self.db_cluster.cql_connection_patient(self.db_cluster.nodes[0]) as session:
+            for cmd in self.params.get('pre_create_keyspace'):
+                session.execute(cmd)
         prepare_write_cmd = self.params.get('prepare_write_cmd')
         if prepare_write_cmd:
             # create new document in ES with doc_id = test_id + timestamp
