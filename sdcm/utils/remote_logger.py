@@ -302,7 +302,7 @@ class KubectlGeneralLogger(CommandNodeLoggerBase):
 
 
 class K8sClientLogger(LoggerBase):  # pylint: disable=too-many-instance-attributes
-    READ_REQUEST_TIMEOUT = 1200  # 20 minutes
+    READ_REQUEST_TIMEOUT = 120  # 2 minutes
     RECONNECT_DELAY = 30
     CHUNK_SIZE = 64
 
@@ -329,6 +329,19 @@ class K8sClientLogger(LoggerBase):  # pylint: disable=too-many-instance-attribut
         self._log.info("Starting logger for pod %s", self._pod_name)
         self._thread.start()
 
+    def _close_stream_forcibly(self, stream):
+        # NOTE: Use 'socket' lib to close the logs watcher forcibly.
+        #       It is needed because the 'self._stream.close()' will wait
+        #       until the 'self.READ_REQUEST_TIMEOUT' ends and so in each of the pod threads
+        #       which get closed serially.
+        try:
+            sock_obj = socket.fromfd(stream.fileno(), socket.AF_INET, socket.SOCK_STREAM)
+            sock_obj.shutdown(socket.SHUT_RDWR)
+            sock_obj.close()
+            stream.close()
+        except Exception:  # pylint: disable=broad-except
+            self._log.debug("Failed to close stream forcibly on %s", self._pod_name)
+
     def stop(self, timeout=None):
         if not self._thread.is_alive():
             self._log.info("Logger for pod %s is already stopped. Ignoring.", self._pod_name)
@@ -336,13 +349,7 @@ class K8sClientLogger(LoggerBase):  # pylint: disable=too-many-instance-attribut
         self._log.info("Stopping logger for pod %s", self._pod_name)
         self._termination_event.set()
         if self._stream:
-            # NOTE: Use 'socket' lib to close the logs watcher forcibly.
-            #       It is needed because the 'self._stream.close()' will wait
-            #       until the 'self.READ_REQUEST_TIMEOUT' ends and so in each of the pod threads
-            #       which get closed serially.
-            sock_obj = socket.fromfd(self._stream.fileno(), socket.AF_INET, socket.SOCK_STREAM)
-            sock_obj.shutdown(socket.SHUT_RDWR)
-            sock_obj.close()
+            self._close_stream_forcibly(self._stream)
         self._thread.join(timeout)
         self._file_object.close()
 
@@ -380,11 +387,8 @@ class K8sClientLogger(LoggerBase):  # pylint: disable=too-many-instance-attribut
                 timestamps=True,
                 follow=True,
                 since_seconds=since_seconds,
-                # NOTE: need to set a timeout, because GKE's 'pod_log' API tends to hang
-                _request_timeout=self.READ_REQUEST_TIMEOUT,
                 _preload_content=False
             )
-
             self._log_reader = self._read_log_lines(self._stream)
             self._reread_logs_till_last_logged_timestamp()
         except (k8s.client.rest.ApiException, StopIteration) as exc:
@@ -423,11 +427,32 @@ class K8sClientLogger(LoggerBase):  # pylint: disable=too-many-instance-attribut
         self._last_log_timestamp = timestamp
         self._file_object.write(line)
 
+    def _close_stream_on_inactivity(self, stream, activity_marker: Event):
+
+        def watcher_func():
+            while not self._termination_event.is_set():
+                time.sleep(self.READ_REQUEST_TIMEOUT)
+                if not activity_marker.is_set():
+                    self._log.debug("No activity in pod %s log stream for %s seconds, closing stream",
+                                    self._pod_name, self.READ_REQUEST_TIMEOUT)
+                    self._close_stream_forcibly(stream)
+                    break
+                activity_marker.clear()
+
+        Thread(target=watcher_func).start()
+
     def _read_log_lines(self, stream) -> Generator[tuple[str, str], None, None]:
         """Reads log lines. Returns a tuple of timestamp and log line"""
         buffer = ''
+        activity_marker = Event()
+        self._close_stream_on_inactivity(stream, activity_marker)
         while not self._termination_event.is_set():
-            chunk = stream.read(self.CHUNK_SIZE).decode("utf-8")
+            try:
+                chunk = stream.read(self.CHUNK_SIZE).decode("utf-8")
+            except AttributeError:
+                # stream is closed
+                break
+            activity_marker.set()
             if not chunk:
                 break
             buffer += chunk
@@ -461,6 +486,7 @@ class K8sClientLogger(LoggerBase):  # pylint: disable=too-many-instance-attribut
             except (MaxRetryError, ProtocolError, ReadTimeoutError, TimeoutError, AttributeError) as exc:
                 self._log.debug(
                     "'_read_log_line()': failed to read from pod %s log stream:%s", self._pod_name, exc)
+                time.sleep(self.RECONNECT_DELAY)
                 self._open_stream()
             except Exception as exc:  # pylint: disable=broad-except
                 self._log.error(
