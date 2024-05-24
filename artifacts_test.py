@@ -439,6 +439,8 @@ class ArtifactsTest(ClusterTester):  # pylint: disable=too-many-public-methods
             with self.subTest("Check docker latest tags"):
                 self.verify_docker_latest_match_release()
 
+        self.node.generate_coredump_file(restart_scylla=False)
+
     def run_scylla_doctor(self):
         if self.params.get('client_encrypt') and SkipPerIssues("https://github.com/scylladb/field-engineering/issues/2280", self.params):
             self.log.info("Scylla Doctor test is skipped for encrypted environment due to issue field-engineering#2280")
