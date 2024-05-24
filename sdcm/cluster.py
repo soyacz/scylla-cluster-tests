@@ -2516,7 +2516,8 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
             message += f"Node: {node_name}"
         InfoEvent(severity=Severity.ERROR, message=message)
         self.remoter.sudo("pkill -f --signal 3 /usr/bin/scylla")
-        self.wait_db_down(timeout=600)
+        time.sleep(60)  # wait db down is ack.
+        self.wait_db_up(timeout=600)
         if restart_scylla:
             self.log.debug('Restart scylla server')
             self.stop_scylla(timeout=600)

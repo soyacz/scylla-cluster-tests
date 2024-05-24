@@ -310,6 +310,8 @@ class ArtifactsTest(ClusterTester):  # pylint: disable=too-many-public-methods
 
         backend = self.params.get("cluster_backend")
 
+        self.node.generate_coredump_file(restart_scylla=False)
+
         if backend == "aws":
             with self.subTest("check ENA support"):
                 assert self.node.ena_support, "ENA support is not enabled"
