@@ -1,3 +1,4 @@
 instance_type_db: 'im4gn.2xlarge'
 # enhanced network isn't supported
 append_scylla_setup_args: ' --no-ec2-check '
+append_scylla_args: ' --logger-log-level raft=trace:group0_raft_sm=trace'
