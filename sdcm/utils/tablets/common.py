@@ -46,3 +46,15 @@ def wait_for_tablets_balanced(node):
                                 params={}, timeout=3600, retry=3)
         time.sleep(5)
     LOGGER.info("Tablets are balanced")
+
+
+def set_auto_repair(node, enabled: bool, keyspace: str = "keyspace1", table: str = "standard1", threshold: int = 300):
+    """
+    Set the auto repair configuration on the node.
+    """
+    LOGGER.info(f"Turning auto repair {'on' if enabled else 'off'} on {node.name}")
+    node.remoter.run(
+        f"curl -X POST 'http://127.0.0.1:10000/storage_service/tablets/config_repair?ks={keyspace}"
+        f"&table={table}&auto_repair_enabled={'true' if enabled else 'false'}&auto_repair_threshold={threshold}'"
+    )
+    LOGGER.info(f"Auto repair on node {node.name} is set to {enabled}")

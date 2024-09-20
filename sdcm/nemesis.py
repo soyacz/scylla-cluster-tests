@@ -129,7 +129,7 @@ from sdcm.utils.replication_strategy_utils import temporary_replication_strategy
     NetworkTopologyReplicationStrategy, ReplicationStrategy, SimpleReplicationStrategy
 from sdcm.utils.sstable.load_utils import SstableLoadUtils
 from sdcm.utils.sstable.sstable_utils import SstableUtils
-from sdcm.utils.tablets.common import wait_for_tablets_balanced
+from sdcm.utils.tablets.common import wait_for_tablets_balanced, set_auto_repair
 from sdcm.utils.toppartition_util import NewApiTopPartitionCmd, OldApiTopPartitionCmd
 from sdcm.utils.version_utils import MethodVersionNotFound, scylla_versions
 from sdcm.utils.raft import Group0MembersNotConsistentWithTokenRingMembersException, TopologyOperations
@@ -1809,6 +1809,23 @@ class Nemesis:  # pylint: disable=too-many-instance-attributes,too-many-public-m
             time.sleep(15)
             node.restart_scylla_server()
             node.wait_db_up()
+
+    @latency_calculator_decorator(legend="Enable tablet auto repair")
+    def disrupt_enable_auto_repair(self):
+        sleep_time_between_ops = self.cluster.params.get('nemesis_sequence_sleep_between_ops')
+        if not self.has_steady_run and sleep_time_between_ops:
+            self.steady_state_latency()
+            self.has_steady_run = True
+        LOGGER.info("enabling auto repair on db nodes")
+        for node in self.cluster.nodes:
+            set_auto_repair(node, enabled=True, keyspace="keyspace1", table="standard1", threshold=300)
+        duration = 15 * 60
+        LOGGER.info(f"auto repair enabled for {duration} seconds")
+        time.sleep(duration)
+        LOGGER.info("disabling auto repair on db nodes")
+        for node in self.cluster.nodes:
+            set_auto_repair(node, enabled=False, keyspace="keyspace1", table="standard1", threshold=300)
+        LOGGER.info("auto repair disabled")
 
     def disrupt_remove_service_level_while_load(self):
         # Temporary solution. We do not want to run SLA nemeses during not-SLA test until the feature is stable
@@ -6628,3 +6645,11 @@ class EndOfQuotaNemesis(Nemesis):
 
     def disrupt(self):
         self.disrupt_end_of_quota_nemesis()
+
+
+class EnableAutoRepair(Nemesis):
+    disruptive = False
+    config_changes = False
+
+    def disrupt(self):
+        self.disrupt_enable_auto_repair()
