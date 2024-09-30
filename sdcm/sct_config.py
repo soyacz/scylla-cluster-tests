@@ -1252,11 +1252,6 @@ class SCTConfiguration(dict):
         dict(name="upgrade_node_packages", env="SCT_UPGRADE_NODE_PACKAGES", type=str,
              help=""),
 
-        dict(name="test_sst3", env="SCT_TEST_SST3", type=boolean,
-             help=""),
-
-        dict(name="test_upgrade_from_installed_3_1_0", env="SCT_TEST_UPGRADE_FROM_INSTALLED_3_1_0", type=boolean,
-             help="Enable an option for installed 3.1.0 for work around a scylla issue if it's true"),
 
         dict(name="recover_system_tables", env="SCT_RECOVER_SYSTEM_TABLES", type=boolean,
              help=""),
