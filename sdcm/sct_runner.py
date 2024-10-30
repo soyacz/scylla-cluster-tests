@@ -781,8 +781,8 @@ class GceSctRunner(SctRunner):  # pylint: disable=too-many-instance-attributes
     BASE_IMAGE = "https://www.googleapis.com/compute/v1/projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts-amd64"
     SOURCE_IMAGE_REGION = "us-east1"  # where the source Runner image will be created and copied to other regions
     IMAGE_BUILDER_INSTANCE_TYPE = "e2-standard-2"
-    REGULAR_TEST_INSTANCE_TYPE = "e2-standard-2"  # 2 vcpus, 8G
-    LONGTERM_TEST_INSTANCE_TYPE = "e2-standard-4"  # 2 vcpus, 16G,
+    REGULAR_TEST_INSTANCE_TYPE = "c3-highcpu-4"  # 2 vcpus, 8G
+    LONGTERM_TEST_INSTANCE_TYPE = "c3-highcpu-4"  # 2 vcpus, 16G,
 
     FAMILY = "sct-runner-image"
     SCT_NETWORK = "qa-vpc"
