@@ -542,6 +542,9 @@ def create_instance(  # noqa: PLR0913
     if "z3-highmem" in machine_type:
         instance.scheduling.on_host_maintenance = "MIGRATE"
 
+    if "n2-highmem" in machine_type:
+        instance.min_cpu_platform = "Intel Ice Lake"
+
     if spot:
         # Set the Spot VM setting
         instance.scheduling.provisioning_model = (
