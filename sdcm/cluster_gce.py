@@ -422,6 +422,8 @@ class GCECluster(cluster.BaseCluster):
             service_accounts=self._service_accounts,
             network_tags=network_tags
         )
+        if "n2-highmem" in create_node_params['machine_type']:
+            create_node_params['min_cpu_platform'] = 'Intel Ice Lake'
         instance = self._create_node_with_retries(name=name,
                                                   dc_idx=dc_idx,
                                                   create_node_params=create_node_params)
