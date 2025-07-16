@@ -1,0 +1,2 @@
+gce_instance_type_db: 'c4-highmem-16-lssd'
+gce_instance_type_loader: 'c3-highcpu-22'

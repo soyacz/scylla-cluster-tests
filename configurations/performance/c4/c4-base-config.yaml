@@ -1,0 +1,8 @@
+gce_root_disk_type_db: 'hyperdisk-balanced'
+gce_n_local_ssd_disk_db: 0
+gce_root_disk_type_loader: 'pd-ssd'
+gce_instance_type_monitor: 'n2-highmem-16'
+user_prefix: 'perf-regression-c4'
+gce_project: 'gcp-local-ssd-latency'
+
+force_run_iotune: true
