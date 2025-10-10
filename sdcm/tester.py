@@ -74,7 +74,7 @@ from sdcm.provision.azure.provisioner import AzureProvisioner
 from sdcm.provision.network_configuration import ssh_connection_ip_type
 from sdcm.provision.provisioner import provisioner_factory
 from sdcm.provision.helpers.certificate import (
-    create_ca, update_certificate, cleanup_ssl_config, CLIENT_FACING_CERTFILE,
+    create_ca, cleanup_ssl_config, CLIENT_FACING_CERTFILE,
     CLIENT_FACING_KEYFILE, CA_CERT_FILE, SCYLLA_SSL_CONF_DIR)
 from sdcm.reporting.elastic_reporter import ElasticRunReporter
 from sdcm.reporting.tooling_reporter import PythonDriverReporter
@@ -104,7 +104,7 @@ from sdcm.utils.decorators import log_run_info, retrying, measure_time, optional
 from sdcm.utils.git import get_git_commit_id, get_git_status_info
 from sdcm.utils.ldap import LDAP_USERS, LDAP_PASSWORD, LDAP_ROLE, LDAP_BASE_OBJECT, \
     LdapConfigurationError, LdapServerType
-from sdcm.utils.log import configure_logging, handle_exception
+from sdcm.utils.log import configure_logging
 from sdcm.utils.issues import SkipPerIssues
 from sdcm.utils.nemesis_utils.node_allocator import NemesisNodeAllocator
 from sdcm.db_stats import PrometheusDBStats
@@ -187,6 +187,24 @@ except ImportError:
 TEST_LOG = logging.getLogger(__name__)
 
 PYTHON_THREAD_LIST = (KafkaCDCReaderThread, KafkaProducerThread, KafkaValidatorThread)
+EXTERNALLY_ABORTED = threading.Event()
+
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    TEST_LOG.info("handle_exception called")
+    if issubclass(exc_type, KeyboardInterrupt):
+        EXTERNALLY_ABORTED.set()
+        try:
+            TestFrameworkEvent(
+                source="SignalHandler",
+                source_method="abort_signal",
+                message="External KeyboardInterrupt received, marking test as aborted",
+                severity=Severity.CRITICAL
+            ).publish_or_dump()
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        except Exception:  # noqa: BLE001
+            TEST_LOG.exception("Failed to handle/publish abort signal")
+        return
 
 
 def teardown_on_exception(method):
@@ -538,7 +556,8 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):
         try:
             stat_map = {
                 "SUCCESS": TestStatus.PASSED,
-                "FAILED": TestStatus.FAILED
+                "FAILED": TestStatus.FAILED,
+                "ABORTED": TestStatus.ABORTED,
             }
 
             last_events_limit = 100
@@ -800,14 +819,13 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):
             return self.db_cluster.get_rack_names_per_datacenter_and_rack_idx(db_nodes=ready_nodes)
         return None
 
-    @staticmethod
-    def update_certificate():
-        update_certificate()
-
     def get_event_summary(self) -> dict:
         return get_logger_event_summary(_registry=self.events_processes_registry)
 
     def get_test_status(self) -> str:
+        if EXTERNALLY_ABORTED.is_set():
+            self.log.warning("Test was externally aborted")
+            return 'ABORTED'
         summary = self.get_event_summary()
         if summary.get('ERROR', 0) or summary.get('CRITICAL', 0):
             return 'FAILED'
@@ -3318,6 +3336,29 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):
             pass
 
         self.log.info('Test ID: {}'.format(self.test_config.test_id()))
+
+    # @pytest.fixture(autouse=True)
+    # def fixture_exception_handler(self, setup_logging):
+    #
+    #     def handle_exception(exc_type, exc_value, exc_traceback):
+    #         self.log.info("handle_exception called")
+    #         if issubclass(exc_type, KeyboardInterrupt):
+    #             EXTERNALLY_ABORTED.set()
+    #             try:
+    #                 TestFrameworkEvent(
+    #                     source="SignalHandler",
+    #                     source_method="abort_signal",
+    #                     message="External KeyboardInterrupt received, marking test as aborted",
+    #                     severity=Severity.CRITICAL
+    #                 ).publish_or_dump()
+    #                 sys.__excepthook__(exc_type, exc_value, exc_traceback)
+    #             except Exception:  # noqa: BLE001
+    #                 self.log.exception("Failed to handle/publish abort signal")
+    #             return
+    #
+    #         self.log.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    #     self.log.info("configure global exception handler")
+    #     sys.excepthook = handle_exception
 
     @pytest.fixture(scope="session", autouse=True)
     def configure_logging_fixture(self):

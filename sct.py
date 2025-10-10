@@ -1458,6 +1458,7 @@ def send_email(test_id=None, test_status=None, start_time=None, started_by=None,
             test_results = read_email_data_from_file(email_results_file)
     else:
         LOGGER.warning("Failed to find test directory for %s", test_id)
+
     if not test_results:
         if not test_status:
             test_status = 'ABORTED'
@@ -1477,7 +1478,9 @@ def send_email(test_id=None, test_status=None, start_time=None, started_by=None,
         else:
             LOGGER.error('failed to get a reporter')
             sys.exit(1)
-        return
+
+    # in case  aborted test by jenkins, SCT still fills email data as it finished normally
+    # test_results['test_status'] = test_status or test_results.get('test_status', 'ABORTED')
     job_name = os.environ.get('JOB_NAME', '')
     if reporter := test_results.get("reporter", ""):
         test_results['nodes'] = get_running_instances_for_email_report(test_id, runner_ip)
@@ -1878,13 +1881,14 @@ def finish_argus_test_run(jenkins_status):
         test_config.set_test_id_only(params.get('test_id'))
         test_config.init_argus_client(params)
         status = test_config.argus_client().get_status()
-        if status in [TestStatus.PASSED, TestStatus.FAILED, TestStatus.TEST_ERROR]:
+        if status in [TestStatus.PASSED, TestStatus.FAILED, TestStatus.TEST_ERROR, TestStatus.ABORTED]:
             LOGGER.info("Argus TestRun already finished with status %s", status.value)
             return
         new_status = TestStatus.FAILED
         if jenkins_status == "ABORTED":
             LOGGER.info("Jenkins build status is ABORTED, setting Argus TestRun status to ABORTED")
             new_status = TestStatus.ABORTED
+
         test_config.argus_client().set_sct_run_status(new_status)
         test_config.argus_client().finalize_sct_run()
     except ArgusClientError:

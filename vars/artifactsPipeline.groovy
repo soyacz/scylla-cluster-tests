@@ -160,7 +160,7 @@ def call(Map pipelineParams) {
                                         }
                                         stage("Run SCT Test (${instance_type})") {
                                             // Timeout for the test itself
-                                            timeout(time: pipelineParams.timeout.time, unit: 'MINUTES') {
+                                            timeout(time: 3, unit: 'MINUTES') {
                                                 def cloud_provider = getCloudProviderFromBackend(params.backend)
                                                 sctScript """
                                                     rm -fv ./latest

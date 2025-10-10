@@ -17,14 +17,6 @@ def setup_stdout_logger(log_level=logging.INFO):
     return root_logger
 
 
-def handle_exception(exc_type, exc_value, exc_traceback):
-    if issubclass(exc_type, KeyboardInterrupt):
-        sys.__excepthook__(exc_type, exc_value, exc_traceback)
-        return
-
-    LOGGER.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
-
-
 class MultilineMessagesFormatter(logging.Formatter):
 
     def format(self, record):
