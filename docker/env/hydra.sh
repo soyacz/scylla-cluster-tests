@@ -247,10 +247,18 @@ function run_in_docker () {
           -u ${USER_ID}
         )
     fi
-
+    name_args=()
+    if [[ -n "${CONTAINER_NAME}" ]]; then
+      name_args+=(--name "${CONTAINER_NAME}" --cidfile "${CIDFILE}" --init --stop-timeout 120)
+    fi
+    if [[ -n "${CIDFILE}" && -f "${CIDFILE}" ]]; then
+      echo "Old CID file found at ${CIDFILE}, removing it..."
+      rm -f "${CIDFILE}"
+    fi
     echo "Going to run '${CMD_TO_RUN}'..."
     $([[ -n "$HYDRA_DRY_RUN" ]] && echo echo) \
     $tool ${REMOTE_DOCKER_HOST} run --rm ${TTY_STDIN} --privileged \
+        ${name_args[@]} \
         -h ${HOST_NAME} \
         -v "${SCT_DIR}:${SCT_DIR}" \
         -v /tmp:/tmp \
@@ -284,7 +292,6 @@ function run_in_docker () {
         --net=host \
         --ulimit core=-1 \
         -v /var/lib/systemd/coredump:/var/lib/systemd/coredump \
-        --name="${SCT_TEST_ID}_$(date +%s)" \
         ${DOCKER_REGISTRY}/${DOCKER_REPO}:${VERSION} \
         /bin/bash -c "${PREPARE_CMD}; ${TERM_SET_SIZE} eval '${CMD_TO_RUN}'"
 }
@@ -314,8 +321,26 @@ if [[ -n "$RUNNER_IP" ]]; then
             echo 'eval $(ssh-agent -k)'
         fi
     }
+    CONTAINER_TS=$(date +%s)
+    CONTAINER_NAME="${SCT_TEST_ID}_${CONTAINER_TS}"
+    CIDFILE="/tmp/hydra_${SCT_TEST_ID}.cid"
+    DOCKER_HOST_ARGS="${DOCKER_HOST}"
 
-    trap clean_ssh_agent EXIT
+    cleanup() {
+      echo "Cleaning up remote container..."
+      if [[ -f "${CIDFILE}" ]]; then
+        $tool ${DOCKER_HOST_ARGS} stop -t 30 "$(cat "${CIDFILE}")" >/dev/null 2>&1 || true
+        $tool ${DOCKER_HOST_ARGS} rm -f "$(cat "${CIDFILE}")" >/dev/null 2>&1 || true
+      elif [[ -n "${CONTAINER_NAME}" ]]; then
+        $tool ${DOCKER_HOST_ARGS} stop -t 30 "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+        $tool ${DOCKER_HOST_ARGS} rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+      fi
+    }
+
+    # Combined traps: run both on EXIT; only cleanup on signals
+    trap 'cleanup; clean_ssh_agent' EXIT
+    trap 'cleanup' INT TERM HUP
+
 
     # TODO: still need to sync scylla-test, until replacing keys in jenkins
     if [ -z "$HYDRA_DRY_RUN" ]; then

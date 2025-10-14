@@ -348,7 +348,7 @@ def call(Map pipelineParams) {
                         script {
                             wrap([$class: 'BuildUser']) {
                                 dir('scylla-cluster-tests') {
-                                    timeout(time: testRunTimeout, unit: 'MINUTES') {
+                                    timeout(time: 7, unit: 'MINUTES') {
                                         runSctTest(params, builder.region, functional_test, pipelineParams)
                                         completed_stages['run_tests'] = true
                                     }

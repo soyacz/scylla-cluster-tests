@@ -104,7 +104,7 @@ from sdcm.utils.decorators import log_run_info, retrying, measure_time, optional
 from sdcm.utils.git import get_git_commit_id, get_git_status_info
 from sdcm.utils.ldap import LDAP_USERS, LDAP_PASSWORD, LDAP_ROLE, LDAP_BASE_OBJECT, \
     LdapConfigurationError, LdapServerType
-from sdcm.utils.log import configure_logging, handle_exception
+from sdcm.utils.log import configure_logging, handle_exception, EXTERNALLY_ABORTED
 from sdcm.utils.issues import SkipPerIssues
 from sdcm.utils.nemesis_utils.node_allocator import NemesisNodeAllocator
 from sdcm.db_stats import PrometheusDBStats
@@ -538,7 +538,8 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):
         try:
             stat_map = {
                 "SUCCESS": TestStatus.PASSED,
-                "FAILED": TestStatus.FAILED
+                "FAILED": TestStatus.FAILED,
+                "ABORTED": TestStatus.ABORTED,
             }
 
             last_events_limit = 100
@@ -808,6 +809,8 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):
         return get_logger_event_summary(_registry=self.events_processes_registry)
 
     def get_test_status(self) -> str:
+        if EXTERNALLY_ABORTED.is_set():
+            return 'ABORTED'
         summary = self.get_event_summary()
         if summary.get('ERROR', 0) or summary.get('CRITICAL', 0):
             return 'FAILED'
@@ -3318,6 +3321,49 @@ class ClusterTester(db_stats.TestStatsMixin, unittest.TestCase):
             pass
 
         self.log.info('Test ID: {}'.format(self.test_config.test_id()))
+
+    @pytest.fixture(autouse=True)
+    def _install_signal_stop_event(self, request, setup_logging):
+        """
+        Automatically install SIGTERM/SIGINT handler that sets a stop event
+        while preserving default signal behavior (so Jenkins/pytest still exit normally).
+        The event is stored in request.config for optional access.
+        """
+        old_handlers = {}
+        self.log.error("Installing SIGTERM/SIGINT handler to set stop event")
+
+        def handle_signal_custom(signum, frame):
+            EXTERNALLY_ABORTED.set()
+            self.log.error("Received signal %s, setting stop event", signum)
+            prev = old_handlers.get(signum)
+            if callable(prev):
+                prev(signum, frame)
+            elif prev == signal.SIG_DFL:
+                signal.signal(signum, signal.SIG_DFL)
+                signal.raise_signal(signum)
+
+        for sig in signal.valid_signals():
+            old_handlers[sig] = signal.getsignal(sig)
+            self.log.error("previous signal: %s handler: %s", sig, old_handlers[sig])
+            try:
+                signal.signal(sig, handle_signal_custom)
+            except (OSError, RuntimeError, ValueError):
+                self.log.error("Failed to set signal: %s handler", sig)
+                continue
+
+        for sig in signal.valid_signals():
+            try:
+                self.log.error("current signal: %s handler: %s", sig, signal.getsignal(sig))
+            except Exception:  # noqa: BLE001
+                self.log.error("Failed to get signal: %s handler", sig)
+                continue
+        # Optionally expose the event globally if needed
+        request.config._stop_event = EXTERNALLY_ABORTED
+
+        yield
+
+        for sig, prev in old_handlers.items():
+            signal.signal(sig, prev)
 
     @pytest.fixture(scope="session", autouse=True)
     def configure_logging_fixture(self):

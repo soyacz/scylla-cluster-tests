@@ -1,6 +1,7 @@
 import sys
 import logging
 import logging.config
+import threading
 import warnings
 from datetime import datetime
 
@@ -8,6 +9,7 @@ import urllib3
 import json
 
 LOGGER = logging.getLogger(__name__)
+EXTERNALLY_ABORTED = threading.Event()
 
 
 def setup_stdout_logger(log_level=logging.INFO):
@@ -19,6 +21,7 @@ def setup_stdout_logger(log_level=logging.INFO):
 
 def handle_exception(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
+        EXTERNALLY_ABORTED.set()
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
 
