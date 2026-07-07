@@ -12,6 +12,7 @@
 # Copyright (c) 2025 ScyllaDB
 
 import time
+import queue
 import logging
 import threading
 from typing import NewType, Dict, Any, Tuple, Optional, Callable, cast
@@ -19,6 +20,7 @@ from functools import partial
 from collections import defaultdict
 
 from argus.common.sct_types import RawEventPayload
+from sdcm.sct_events import Severity
 from sdcm.sct_events.events_processes import (
     EVENTS_ARGUS_ANNOTATOR_ID,
     EVENTS_ARGUS_AGGREGATOR_ID,
@@ -34,6 +36,8 @@ from sdcm.utils.argus import Argus
 
 
 ARGUS_EVENT_AGGREGATOR_TIME_WINDOW: float = 90  # seconds
+ARGUS_POSTMAN_SUBMIT_DEADLINE = 3  # seconds
+ARGUS_POSTMAN_DRAIN_TIMEOUT = 5  # seconds
 LOGGER = logging.getLogger(__name__)
 
 
@@ -110,13 +114,54 @@ class ArgusEventPostman(BaseEventsProcess[SCTArgusEvent, None], threading.Thread
         self.enabled.wait()
 
         for event in self.inbound_events():  # events from ArgusAggregator
+            self._submit_with_deadline(event, ARGUS_POSTMAN_SUBMIT_DEADLINE)
+
+    def _submit_with_deadline(self, event: SCTArgusEvent, deadline: float) -> None:
+        if not self._argus_client:
+            return
+
+        def _submit() -> None:
             with verbose_suppress(
                 "ArgusEventPostman failed to post an event to '%s' endpoint.\nEvent: %s",
                 self._argus_client.Routes.SUBMIT_EVENT,
                 event,
             ):
-                if self._argus_client:
-                    self._argus_client.submit_event(event)
+                self._argus_client.submit_event(event)
+
+        worker = threading.Thread(target=_submit, daemon=True)
+        worker.start()
+        worker.join(deadline)
+        if worker.is_alive():
+            LOGGER.error("ArgusEventPostman abandoned submit of %s after %ss", event, deadline)
+
+    def _drain_outbound(self, deadline: float) -> None:
+        aggregator = get_events_process(EVENTS_ARGUS_AGGREGATOR_ID, _registry=self._registry)
+        if not aggregator:
+            return
+
+        events = []
+        while True:
+            try:
+                events.append(aggregator.outbound_queue.get_nowait())
+            except queue.Empty:
+                break
+
+        events.sort(key=lambda e: Severity[e["severity"]].value, reverse=True)
+
+        for event in events:
+            if time.monotonic() >= deadline:
+                break
+            self._submit_with_deadline(event, min(ARGUS_POSTMAN_SUBMIT_DEADLINE, deadline - time.monotonic()))
+
+    def stop(self, timeout: float = None) -> None:
+        # timeout=None collapses the deadline to "now": terminate, skip the drain, join immediately.
+        # Production always passes timeout=EVENTS_PROCESS_STOP_TIMEOUT (setup.py), so the drain runs.
+        deadline = time.monotonic() + (timeout or 0)
+        self.terminate()
+        self._drain_outbound(min(deadline, time.monotonic() + ARGUS_POSTMAN_DRAIN_TIMEOUT))
+        self.join(max(0, deadline - time.monotonic()))
+        if self.is_alive():
+            LOGGER.error("ArgusEventPostman still alive after %s; proceeding", timeout)
 
     def enable_argus_posting(self) -> None:
         self._argus_client = Argus.get().client
