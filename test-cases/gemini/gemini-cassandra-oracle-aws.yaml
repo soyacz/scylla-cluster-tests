@@ -2,9 +2,14 @@ test_duration: 30
 n_db_nodes: 3
 n_test_oracle_db_nodes: 1
 n_loaders: 1
-instance_type_db: 'i4i.xlarge'
-instance_type_db_oracle: 'r6i.xlarge'
-instance_type_loader: 'm6i.xlarge'
+sizing_db:
+  vcpu: 4
+  memory: '>=32'
+  local_disk_gb: '>=750'
+sizing_loader:
+  vcpu: 4
+  memory: '>=16'
+instance_type_db_oracle: 'r6i.xlarge'  # out of sizing-rollout scope: r6i not in catalog, sizing_db_oracle would force local-disk storage instances
 
 db_type: mixed_cassandra
 cassandra_oracle_version: '4.1'
