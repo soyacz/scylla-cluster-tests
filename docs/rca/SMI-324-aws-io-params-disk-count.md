@@ -232,7 +232,7 @@ Three months of investigation stayed one step from the defect.
 | 1 | Use per-disk entries for i7i, i7ie, i8g, i8ge. Divide by the disk count in the measuring tool. Add a per-drive test. Add a unit header to the yaml. | scylla-machine-image | Valerii Ponomarov | Merged to `next` ([#1033](https://github.com/scylladb/scylla-machine-image/pull/1033)) |
 | 2 | Backport [#1033](https://github.com/scylladb/scylla-machine-image/pull/1033) to 2026.3, 2026.2, 2026.1, 2025.4 and 2025.3. | scylla-machine-image | | 2026.3 open ([#1034](https://github.com/scylladb/scylla-machine-image/pull/1034)), waits for performance tests |
 | 3 | Fix the squared entries on `branch-2025.1`. | scylla-machine-image | | Needs a ticket |
-| 4 | Raise an `ERROR` event in the artifacts test when the installed value is more than 15% above the measured value. Keep `WARNING` for values below the measurement. | scylla-cluster-tests | | Proposed |
+| 4 | Fail the artifacts test when the installed value is higher than the measured value by more than an agreed threshold. Agree on the threshold and on the rule for values below the measurement. | scylla-cluster-tests | | [SCT-1274](https://scylladb.atlassian.net/browse/SCT-1274) |
 | 5 | Show result-table warnings on the run status or the release dashboard in Argus, so passed runs with warnings get triage. | argus | | Proposed |
 | 6 | Add every multi-disk size that has a preset to the release AMI list: all i7i sizes, i7ie 6xlarge to 24xlarge, i8g 12xlarge and 24xlarge, i8ge 24xlarge. | scylla-pkg | | Proposed |
 | 7 | Add a check that each `aws_io_params.yaml` key has a release AMI test entry. | scylla-machine-image or scylla-pkg | | Proposed |
