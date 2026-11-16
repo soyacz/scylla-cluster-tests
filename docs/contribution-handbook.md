@@ -609,6 +609,10 @@ Several workflows use elevated permissions or secrets. Key security patterns:
     bound the damage
   - [`auto_assign`](../.github/workflows/auto_assign.yaml) only calls the GitHub API
     with `issues`/`pull-requests` write and uses no other secrets
+  - [`pr-range-diff`](../.github/workflows/pr-range-diff.yaml) fetches the PR commits
+    as git objects and never checks them out or runs them. It escapes the commit
+    titles and fences the diffs that it posts, and it uses only `GITHUB_TOKEN`
+    with `pull-requests` write
 
   When adding or changing a `pull_request_target` workflow, state which of these applies:
   keep `permissions` minimal, gate on membership if it must check out the PR head, and
