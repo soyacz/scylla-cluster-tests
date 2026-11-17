@@ -84,7 +84,9 @@ jobs:
           new_base=$(git merge-base refs/base "$NEW_HEAD")
           # Hunk headers name the Python function or class of each change.
           echo '*.py diff=python' > .git/info/attributes
-          git range-diff --no-color "$old_base..$OLD_HEAD" "$new_base..$NEW_HEAD" | tee ../range-diff.txt
+          # A creation factor of 80 pairs a small commit with its fixed version,
+          # so the comment shows the diff of the fix.
+          git range-diff --no-color --creation-factor=80 "$old_base..$OLD_HEAD" "$new_base..$NEW_HEAD" | tee ../range-diff.txt
 
       - name: Format comment
         if: steps.push.outputs.old_head != ''
