@@ -2,29 +2,68 @@
 # so a reviewer sees what changed since the previous push.
 # Port of .github/workflows/pr-range-diff.yaml in scylladb/scylladb (b97a8e03965e).
 # Design: docs/plans/ai-tooling/push-to-push-diffs/spec.md
+#
+# pr-range-diff-record.yaml runs on each push to a pull request, with no token,
+# and uploads the PR number. This workflow runs on workflow_run from master.
+# It trusts only the PR number from that run, and takes the old head and the
+# new head from the force-push event of the PR on GitHub.
 name: Post range-diff on PR force-push
 
 on:
-  pull_request_target:
-    types: [synchronize]
+  workflow_run:
+    workflows: ['Record PR push for range-diff']
+    types: [completed]
 
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 
 jobs:
   range-diff:
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
     steps:
+      - name: Find the force-push
+        id: push
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          NEW_HEAD: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          gh run download "$RUN_ID" --name pr-push --dir pr-push
+          # The recorder runs the workflow file of the pull request, so its
+          # artifact is untrusted: accept a number and nothing else.
+          pr=$(head -c 20 pr-push/number | tr -d '\n')
+          [[ "$pr" =~ ^[0-9]+$ ]] || { echo "::error::PR number '$pr' is not a number"; exit 1; }
+          base_ref=$(gh api "repos/$GH_REPO/pulls/$pr" --jq .base.ref)
+          # A push that only appends commits has no force-push event, and gets no
+          # comment. A new head that the PR never had matches no event either.
+          old_head=$(gh api graphql -F owner="${GH_REPO%/*}" -F name="${GH_REPO#*/}" -F number="$pr" -f query='
+            query($owner: String!, $name: String!, $number: Int!) {
+              repository(owner: $owner, name: $name) { pullRequest(number: $number) {
+                timelineItems(last: 100, itemTypes: [HEAD_REF_FORCE_PUSHED_EVENT]) { nodes {
+                  ... on HeadRefForcePushedEvent { beforeCommit { oid } afterCommit { oid } } } } } } }' |
+            jq -r --arg new "$NEW_HEAD" '[.data.repository.pullRequest.timelineItems.nodes[]
+              | select(.afterCommit.oid == $new and .beforeCommit != null)] | last | .beforeCommit.oid // empty')
+          {
+            echo "pr=$pr"
+            echo "base_ref=$base_ref"
+            echo "old_head=$old_head"
+          } >> "$GITHUB_OUTPUT"
+
       # No checkout of the PR's code: only git objects are fetched and compared,
-      # nothing from the PR is executed, so pull_request_target is safe here.
+      # nothing from the PR is executed.
       - name: Fetch old and new heads
+        if: steps.push.outputs.old_head != ''
         env:
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-          OLD_HEAD: ${{ github.event.before }}
-          NEW_HEAD: ${{ github.event.after }}
+          BASE_REF: ${{ steps.push.outputs.base_ref }}
+          OLD_HEAD: ${{ steps.push.outputs.old_head }}
+          NEW_HEAD: ${{ github.event.workflow_run.head_sha }}
         run: |
           git init -q repo && cd repo
           git remote add origin "$REPO_URL"
@@ -33,26 +72,12 @@ jobs:
           # Blobless fetch keeps it cheap; range-diff fetches the blobs it needs lazily.
           git fetch -q --filter=blob:none origin "$OLD_HEAD" "$NEW_HEAD" "+refs/heads/$BASE_REF:refs/base"
 
-      - name: Detect force-push
-        id: forced
-        working-directory: repo
-        env:
-          OLD_HEAD: ${{ github.event.before }}
-          NEW_HEAD: ${{ github.event.after }}
-        run: |
-          # A push that only appends commits keeps the old head as an ancestor.
-          if git merge-base --is-ancestor "$OLD_HEAD" "$NEW_HEAD"; then
-            echo "forced=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "forced=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Compute range-diff
-        if: steps.forced.outputs.forced == 'true'
+        if: steps.push.outputs.old_head != ''
         working-directory: repo
         env:
-          OLD_HEAD: ${{ github.event.before }}
-          NEW_HEAD: ${{ github.event.after }}
+          OLD_HEAD: ${{ steps.push.outputs.old_head }}
+          NEW_HEAD: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -o pipefail
           old_base=$(git merge-base refs/base "$OLD_HEAD")
@@ -62,12 +87,12 @@ jobs:
           git range-diff --no-color "$old_base..$OLD_HEAD" "$new_base..$NEW_HEAD" | tee ../range-diff.txt
 
       - name: Format comment
-        if: steps.forced.outputs.forced == 'true'
+        if: steps.push.outputs.old_head != ''
         env:
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          OLD_HEAD: ${{ github.event.before }}
-          NEW_HEAD: ${{ github.event.after }}
+          OLD_HEAD: ${{ steps.push.outputs.old_head }}
+          NEW_HEAD: ${{ github.event.workflow_run.head_sha }}
         shell: python
         run: |
           import html, os, re
@@ -169,9 +194,9 @@ jobs:
           open("comment.md", "w").write(comment)
 
       - name: Post comment
-        if: steps.forced.outputs.forced == 'true'
+        if: steps.push.outputs.old_head != ''
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ steps.push.outputs.pr }}
         run: gh pr comment "$PR" --body-file comment.md
